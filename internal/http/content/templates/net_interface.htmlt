@@ -1,0 +1,64 @@
+<div class="entity-netmon-host-net-interface">
+    <div class="name-and-index">
+        <div class="name">{{.Name}}</div>
+        <div class="index">{{.Index}}</div>
+        <div class="status">{{.Status}}</div>
+    </div>
+    {{if ne .PhysAddress ""}}
+        <div class="section-start">
+            <div class="label">MAC</div>
+            <div class=indent physical-address>{{.PhysAddress}}</div>
+        </div>
+    {{end}}
+    <div class="ip-addresses">
+        <div class="label nowrap">{{if gt (len .IpAddresses) 1}}IPs{{else}}IP{{end}}</div>
+        {{if eq (len .IpAddresses) 0}}
+            <div class="indent ip-address">None</div>
+        {{else}}
+            <div class="ip-address-list">
+                {{ range .IpAddresses }}
+                    <div class="indent ip-address" title="{{.}}">{{.}}</div>
+                {{ end }}
+            </div>
+        {{end}}
+    </div>
+    <div>
+        <div class="label">Last IP Change</div>
+        {{if .LastIpV4AddressChangeTime.IsZero}}
+            <div class="indent">Never</div>
+        {{else}}
+            <div class="indent timestamp">{{.LastIpV4AddressChangeTime.Format "2006-01-02 3:04:05 PM"}}</div>
+        {{end}}
+    </div>
+    <div class="stats">Tx/Rx Stats</div>
+    <div class="row">
+        <div class="label">Rate</div>
+        <div>{{FormatBits (index .BytesOutRateHistory .CurrentHistoryIndex)}}ps</div>
+        <div>{{FormatBits (index .BytesInRateHistory .CurrentHistoryIndex)}}ps</div>
+    </div>
+    <div class="row">
+        <div class="label">Bytes</div>
+        <div>{{FormatBytes .BytesOut}}</div>
+        <div>{{FormatBytes .BytesIn}}</div>
+    </div>
+    <div class="row packets">
+        <div class="label">Packets</div>
+        <div class="value">{{.PacketsOut}}</div>
+        <div class="value">{{.PacketsIn}}</div>
+    </div>
+    <div class="row">
+        <div class="label">Errors</div>
+        <div>{{.ErrorsOut}}</div>
+        <div>{{.ErrorsIn}}</div>
+    </div>
+    <div class="row">
+        <div class="label">Discards</div>
+        <div>{{.DiscardsOut}}</div>
+        <div>{{.DiscardsIn}}</div>
+    </div>
+    <div class="graph-container-parent">
+        <div class="graph-container">
+            {{RenderGraph (.GetBytesOutRateHistory 60) (.GetBytesInRateHistory 60)}}
+        </div>
+    </div>
+</div>

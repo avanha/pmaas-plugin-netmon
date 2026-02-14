@@ -1,0 +1,42 @@
+.entity-netmon-host {
+    display: flex;
+    flex-flow: column;
+}
+
+.entity-netmon-host .row {
+    display: flex;
+    flex-flow: row nowrap;
+}
+
+.entity-netmon-host .row > :not(:last-child) {
+    margin-right: 10px;
+}
+
+.entity-netmon-host .label::after {
+    content: ":";
+}
+
+.entity-netmon-host .host-info .name {
+    font-weight: bold;
+}
+
+.entity-netmon-host .host-info .last-update-time {
+    margin-left: auto;
+}
+
+.entity-netmon-host .relative-uptime {
+    margin-top: 7px;
+}
+
+.entity-netmon-host .interface-container {
+    display: flex;
+    flex-flow: row wrap;
+}
+
+.entity-netmon-host .interface-container > * {
+    margin-top: 10px;
+}
+
+.entity-netmon-host .interface-container > *:not(:last-child) {
+    margin-right: 10px;
+}

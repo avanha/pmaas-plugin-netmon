@@ -1,0 +1,153 @@
+.entity-netmon-host-net-interface {
+    flex-grow: 0;
+    display: flex;
+    flex-flow: column;
+    border: 1px solid black;
+    padding: 5px;
+    min-width: 218px;
+    max-width: 45%;
+}
+
+.entity-netmon-host-net-interface .indent {
+    margin-left: 5px;
+}
+
+.entity-netmon-host-net-interface .section-start {
+    margin-top: 5px;
+}
+
+.entity-netmon-host-net-interface .timestamp {
+    white-space: nowrap;
+}
+
+.entity-netmon-host-net-interface .name-and-index {
+    display: flex;
+    flex-flow: row nowrap;
+    font-weight: bold;
+}
+.entity-netmon-host-net-interface .name-and-index > *:not(:last-child) {
+    margin-right: 5px;
+}
+
+.entity-netmon-host-net-interface .name-and-index .index {
+    color: grey;
+}
+
+.entity-netmon-host-net-interface .name-and-index .index::before {
+    content: "(";
+}
+
+.entity-netmon-host-net-interface .name-and-index .index::after {
+    content: ")";
+}
+
+.entity-netmon-host-net-interface .name-and-index .status {
+    font-weight: normal;
+    margin-left: auto;
+}
+
+.entity-netmon-host-net-interface .ip-addresses {
+    margin-top: 5px;
+}
+
+.entity-netmon-host-net-interface .ip-address-list {
+    display: flex;
+    flex-flow: column nowrap;
+}
+
+.entity-netmon-host-net-interface .ip-address-list .ip-address {
+    font-size: 10pt;
+    line-height: 18px;
+    vertical-align: bottom;
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.entity-netmon-host-net-interface .stats {
+    margin-top: 5px;
+}
+
+.entity-netmon-host-net-interface .packets .value {
+    font-size: 9pt;
+    line-height: 18px;
+    vertical-align: bottom;
+}
+
+.entity-netmon-host-net-interface .graph-container-parent {
+    margin-top: 5px;
+    padding: 5px 5px 0 5px;
+    border: 1px solid black;
+}
+
+.entity-netmon-host-net-interface .graph-container {
+    width: 100%;
+    height: 100px;
+}
+
+.entity-netmon-host-net-interface .graph-container>div {
+    width: 100%;
+    height: 100%;
+}
+
+.entity-netmon-host-net-interface .graph-container .bar-container {
+    display: inline-block;
+    width: 1.6%;
+    height: 100%;
+    position: relative;
+}
+
+.entity-netmon-host-net-interface .graph-container .bar-container:hover .data-label {
+    visibility: visible;
+}
+
+.entity-netmon-host-net-interface .graph-container .bar-container .data-label {
+    position: absolute;
+    top: 15%;
+    left: 100%;
+    padding: 2px 4px;
+    color: white;
+    background-color: #454545;
+    visibility: hidden;
+    font-size: 9pt;
+    text-wrap: nowrap;
+    display: inline-block;
+    z-index: 11;
+    border-radius: 3px;
+}
+
+.entity-netmon-host-net-interface .graph-container .bar-container .bar-overlay {
+    background-color: black;
+    opacity: 0;
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    z-index: 10;
+}
+
+.entity-netmon-host-net-interface .graph-container .bar-container .bar-overlay:hover {
+    opacity: 25.0%;
+}
+
+.entity-netmon-host-net-interface .graph-container .bar-container .bar {
+    width: 100%;
+    min-width: 1px;
+    position: absolute;
+    bottom: 0;
+    mix-blend-mode: multiply;
+    opacity: 1;
+}
+
+.entity-netmon-host-net-interface .graph-container .bar-container .bar.series-0 {
+    background: #4a98ff;
+    z-index: 9;
+}
+
+.entity-netmon-host-net-interface .graph-container .bar-container .bar.series-1 {
+    background: #ffcc6b;
+    z-index: 8;
+}
+
+
+
