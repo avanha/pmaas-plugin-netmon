@@ -29,6 +29,10 @@ type plugin struct {
 	httpHandler   *http.Handler
 }
 
+func NewPluginConfig() config.PluginConfig {
+	return config.PluginConfig{}
+}
+
 type Plugin interface {
 	spi.IPMAASPlugin2
 }

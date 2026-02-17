@@ -4,10 +4,6 @@ type PluginConfig struct {
 	Hosts []Host
 }
 
-func NewPluginConfig() PluginConfig {
-	return PluginConfig{}
-}
-
 func (c *PluginConfig) AddHost(name string, ipAddress string) Host {
 	host := Host{
 		Name:          name,
