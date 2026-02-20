@@ -14,6 +14,12 @@ import (
 	spievents "github.com/avanha/pmaas-spi/events"
 )
 
+const (
+	ReachabilityUnknown = iota
+	ReachabilityReachable
+	ReachabilityUnreachable
+)
+
 type Host struct {
 	id            string
 	config        config.Host
@@ -101,9 +107,59 @@ func (h *Host) Update(newData *common.HostData, events *[]any) {
 		},
 	}
 
+	pingReachability := ReachabilityUnknown
+	snmpReachability := ReachabilityUnknown
+
+	if h.PingEnabled() && newData.PingPacketsSent > 0 {
+		pingReachability = h.updatePingData(newData, &hostEvent, events)
+	}
+
+	if h.SnmpEnabled() {
+		snmpReachability = h.updateSnmpData(newData, &hostEvent, events)
+	}
+
+	newReachability := calcReachability(pingReachability, snmpReachability)
+
+	if h.data.Reachability != newReachability {
+		*events = append(*events, netmonevents.HostReachabilityChangeEvent{
+			HostEvent: hostEvent,
+			OldValue:  h.data.Reachability,
+			NewValue:  newReachability,
+		})
+		h.data.Reachability = newReachability
+	}
+}
+
+func (h *Host) updatePingData(newData *common.HostData, hostEvent *netmonevents.HostEvent, events *[]any) int {
+	h.data.PingStatus = newData.PingStatus
+
+	if h.data.PingPacketLoss != newData.PingPacketLoss {
+		*events = append(*events, netmonevents.HostPingPacketLossChangeEvent{
+			HostEvent: *hostEvent,
+			OldValue:  h.data.PingPacketLoss,
+			NewValue:  newData.PingPacketLoss,
+		})
+		h.data.PingPacketLoss = newData.PingPacketLoss
+	}
+
+	h.data.PingRttAverage = newData.PingRttAvg
+	h.data.PingRttMin = newData.PingRttMin
+	h.data.PingRttMax = newData.PingRttMax
+	h.data.PingRttStdDev = newData.PingRttStdDev
+
+	if newData.PingPacketLoss == 100 {
+		return ReachabilityUnreachable
+	}
+
+	return ReachabilityReachable
+}
+
+func (h *Host) updateSnmpData(newData *common.HostData, hostEvent *netmonevents.HostEvent, events *[]any) int {
+	h.data.SnmpStatus = newData.SnmpStatus
+
 	if newData.UptimeSeconds != 0 && h.data.UptimeSeconds != newData.UptimeSeconds {
 		*events = append(*events, netmonevents.HostUptimeChangeEvent{
-			HostEvent: hostEvent,
+			HostEvent: *hostEvent,
 			OldValue:  h.data.UptimeSeconds,
 			NewValue:  newData.UptimeSeconds,
 		})
@@ -111,8 +167,27 @@ func (h *Host) Update(newData *common.HostData, events *[]any) {
 	}
 
 	for _, ifData := range newData.IfDataList {
-		h.updateInterface(newData, &ifData, &hostEvent, events)
+		h.updateInterface(newData, &ifData, hostEvent, events)
 	}
+
+	if newData.SnmpSuccess {
+		return ReachabilityReachable
+	}
+
+	return ReachabilityUnreachable
+}
+
+func calcReachability(pingReachability, snmpReachability int) int {
+	if pingReachability == ReachabilityReachable || snmpReachability == ReachabilityReachable {
+		return ReachabilityReachable
+	}
+
+	if pingReachability == ReachabilityUnknown && snmpReachability == ReachabilityUnknown {
+		return ReachabilityUnknown
+	}
+
+	// None were reachable, and at least one status was known to be unreachable, so unreachable it is
+	return ReachabilityUnreachable
 }
 
 func (h *Host) Data() data.HostData {

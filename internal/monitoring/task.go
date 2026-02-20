@@ -100,7 +100,8 @@ func (mt *Task) scan() {
 }
 
 func (mt *Task) pingProbe(data *common.HostData) {
-	fmt.Printf("monitoring task [%s]: Pinging\n", mt.targetName)
+	fmt.Printf("monitoring task [%s]: Pinging with %d packets %d second timeout\n",
+		mt.targetName, mt.host.PingCount(), mt.host.PingTimeoutSeconds())
 	pinger, cancelFn, err := mt.createPinger(mt.targetAddress)
 
 	if err != nil {
@@ -154,8 +155,8 @@ func (mt *Task) createPinger(targetAddress string) (*probing.Pinger, context.Can
 		pinger.SetPrivileged(true)
 	}
 
-	// Create a child context that will be marked done either via the task's context, or when
-	// the function completes.
+	// Create a child context that will be marked done either via the task's context or
+	// via the cancel function that must be invoked by the caller
 	ctx, cancelFn := context.WithCancel(mt.ctx)
 
 	go func() {
@@ -169,6 +170,7 @@ func (mt *Task) createPinger(targetAddress string) (*probing.Pinger, context.Can
 }
 
 func (mt *Task) snmpScan(data *common.HostData) {
+	fmt.Printf("monitoring task [%s]: Retrieving snmp data\n", mt.targetName)
 	target := &gosnmp.GoSNMP{
 		Context:            mt.ctx,
 		Target:             mt.targetAddress,
@@ -182,39 +184,36 @@ func (mt *Task) snmpScan(data *common.HostData) {
 		MaxOids:            gosnmp.MaxOids,
 	}
 	scanStartTime := time.Now()
-	err := target.Connect()
 
-	if err != nil {
+	if err := target.Connect(); err != nil {
 		fmt.Printf("monitoring task [%s]: Unable to connect: %v\n", mt.targetName, err)
 		data.SnmpStatus = fmt.Sprintf("Unable to connect: %v", err)
 		return
 	}
 
 	defer func() {
-		//fmt.Printf("monitoring task [%s]: Closing gosnmp instance\n", mt.targetName)
-		err := target.Close()
-
-		if err != nil {
+		if err := target.Close(); err != nil {
 			fmt.Printf("monitoring task [%s]: Error closing connection: %v\n", mt.targetName, err)
 		}
-
-		//fmt.Printf("monitoring task [%s]: Closed gosnmp instance\n", mt.targetName)
 	}()
 
 	uptimeSuccess := mt.getUptime(target, data)
 	ifTableSuccess := mt.getIfTable(target, data, mt.lastInterfaceCount)
-	ifXTableSuccess := mt.getIfXTable(target, data)
-	ipAddressTableSuccess := mt.getIpAddressTable(target, data)
 
-	if !ipAddressTableSuccess {
-		// There's no need to get the deprecated IPv4-MIB::IpAddrTable if the host supports the
-		// newer IP-MIB::IpAddressTable
-		mt.getIpAddrTable(target, data)
+	if ifTableSuccess {
+		mt.getIfXTable(target, data)
+		ipAddressTableSuccess := mt.getIpAddressTable(target, data)
+
+		if !ipAddressTableSuccess {
+			// There's no need to get the deprecated IPv4-MIB::IpAddrTable if the host supports the
+			// newer IP-MIB::IpAddressTable
+			mt.getIpAddrTable(target, data)
+		}
 	}
 
 	fmt.Printf("monitoring task [%s]: snmp walk completed in %v\n", mt.targetName, time.Since(scanStartTime))
 
-	if uptimeSuccess || ifTableSuccess || ifXTableSuccess || ipAddressTableSuccess {
+	if uptimeSuccess || ifTableSuccess {
 		data.SnmpStatus = "OK"
 		data.SnmpSuccess = true
 	} else {
@@ -422,8 +421,10 @@ var ipV4AddrTableParserMap = map[string]*ipAddressTableParserSpec{
 func (mt *Task) getIfTable(target *gosnmp.GoSNMP, data *common.HostData, previousInterfaceCount int) bool {
 	// Create a slice with entries, not just capacity, we'll write to it by interface index
 	ifData := make([]common.IfData, max(1, previousInterfaceCount))
+	dataUnitCount := 0
 
 	var walkFn = func(dataUnit gosnmp.SnmpPDU) error {
+		dataUnitCount++
 		return mt.processIfTableData(dataUnit, &ifData)
 	}
 
@@ -464,7 +465,8 @@ func (mt *Task) getIfTable(target *gosnmp.GoSNMP, data *common.HostData, previou
 	}
 
 	data.IfDataList = ifData
-	return true
+
+	return dataUnitCount > 0
 }
 
 func (mt *Task) getIfXTable(target *gosnmp.GoSNMP, data *common.HostData) bool {
@@ -583,7 +585,7 @@ func buildIpAddress(keyParts []string) (net.IP, error) {
 	return ip, nil
 }
 
-func (mt *Task) getIpAddrTable(target *gosnmp.GoSNMP, data *common.HostData) {
+func (mt *Task) getIpAddrTable(target *gosnmp.GoSNMP, data *common.HostData) bool {
 	var ipTable = make(map[string]*common.IpMapEntry)
 
 	var walkFn = func(dataUnit gosnmp.SnmpPDU) error {
@@ -600,7 +602,7 @@ func (mt *Task) getIpAddrTable(target *gosnmp.GoSNMP, data *common.HostData) {
 
 	if err != nil {
 		fmt.Printf("monitoring task [%s]: Error retrieving ipAddrTable: %v\n", mt.targetName, err)
-		return
+		return false
 	}
 
 	// Integrate ipMapEntry instances onto the referenced interfaces
@@ -613,6 +615,8 @@ func (mt *Task) getIpAddrTable(target *gosnmp.GoSNMP, data *common.HostData) {
 				mt.targetName, ipMapEntry.IfIndex, len(data.IfDataList))
 		}
 	}
+
+	return true
 }
 
 func (mt *Task) processIpAddressTableData(

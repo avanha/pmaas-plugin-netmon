@@ -16,6 +16,18 @@ type HostUptimeChangeEvent struct {
 	NewValue uint64
 }
 
+type HostPingPacketLossChangeEvent struct {
+	HostEvent
+	OldValue float64
+	NewValue float64
+}
+
+type HostReachabilityChangeEvent struct {
+	HostEvent
+	OldValue int
+	NewValue int
+}
+
 type HostInterfaceEvent struct {
 	HostEvent
 	NetInterface string
