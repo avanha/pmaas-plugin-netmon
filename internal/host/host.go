@@ -132,6 +132,7 @@ func (h *Host) Update(newData *common.HostData, events *[]any) {
 
 func (h *Host) updatePingData(newData *common.HostData, hostEvent *netmonevents.HostEvent, events *[]any) int {
 	h.data.PingStatus = newData.PingStatus
+	h.data.PingPacketsSent = newData.PingPacketsSent
 
 	if h.data.PingPacketLoss != newData.PingPacketLoss {
 		*events = append(*events, netmonevents.HostPingPacketLossChangeEvent{

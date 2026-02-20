@@ -2,6 +2,7 @@
     <div class="row host-info">
         <div class="name">{{.Name}}</div>
         <div class="ip-address">{{.IpAddress}}</div>
+        <div class="reachability">{{.Reachability}}</div>
         <div class="last-update-time">{{.LastUpdateTime.Format "2006-01-02 3:04:05 PM"}}</div>
     </div>
     <div class="row relative-uptime">
@@ -11,6 +12,14 @@
         {{else}}
             <div>{{FormatDuration .RelativeUptime}}</div>
         {{end}}
+    </div>
+    <div class="row ping-stats">
+        <div class="label">Ping</div>
+        <div class="value">{{.PingStatus}} {{.PingPacketsSent}} sent, {{.PingPacketLoss}}% loss</div>
+        <div class="">{{.PingRttAverage}}</div>
+        <div class="">{{.PingRttMin}}</div>
+        <div class="">{{.PingRttMax}}</div>
+        <div class="">{{.PingRttStdDev}}</div>
     </div>
     <div class="interface-container">
         {{range .Interfaces}}

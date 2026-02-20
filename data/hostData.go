@@ -9,6 +9,7 @@ type HostData struct {
 	SnmpStatus           string
 	UptimeSeconds        uint64
 	PingStatus           string
+	PingPacketsSent      int
 	PingPacketLoss       float64
 	PingRttAverage       time.Duration
 	PingRttMin           time.Duration
