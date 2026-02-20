@@ -6,9 +6,14 @@ type PluginConfig struct {
 
 func (c *PluginConfig) AddHost(name string, ipAddress string) Host {
 	host := Host{
-		Name:          name,
-		IpAddress:     ipAddress,
-		NetInterfaces: make(map[string]*NetInterface),
+		Name:               name,
+		IpAddress:          ipAddress,
+		PingEnabled:        true,
+		PingTimeoutSeconds: 10,
+		PingCount:          3,
+		PingUseIcmp:        false,
+		SnmpEnabled:        true,
+		NetInterfaces:      make(map[string]*NetInterface),
 	}
 
 	c.Hosts = append(c.Hosts, host)

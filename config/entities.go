@@ -9,9 +9,14 @@ import (
 )
 
 type Host struct {
-	Name          string
-	IpAddress     string
-	NetInterfaces map[string]*NetInterface
+	Name               string
+	IpAddress          string
+	PingEnabled        bool
+	PingTimeoutSeconds int
+	PingCount          int
+	PingUseIcmp        bool
+	SnmpEnabled        bool
+	NetInterfaces      map[string]*NetInterface
 }
 
 func (h *Host) AddNetInterfaceByName(name string) *NetInterface {

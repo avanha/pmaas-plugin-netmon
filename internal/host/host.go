@@ -54,6 +54,26 @@ func (h *Host) PmaasEntityId() string {
 	return h.pmassEntityId
 }
 
+func (h *Host) PingEnabled() bool {
+	return h.config.PingEnabled
+}
+
+func (h *Host) PingUseIcmp() bool {
+	return h.config.PingUseIcmp
+}
+
+func (h *Host) PingCount() int {
+	return h.config.PingCount
+}
+
+func (h *Host) PingTimeoutSeconds() int {
+	return h.config.PingTimeoutSeconds
+}
+
+func (h *Host) SnmpEnabled() bool {
+	return h.config.SnmpEnabled
+}
+
 func (h *Host) ClearPmaasEntityId() {
 	h.pmassEntityId = ""
 }

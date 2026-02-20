@@ -13,6 +13,7 @@ import (
 	"github.com/avanha/pmaas-plugin-netmon/internal/common"
 	"github.com/avanha/pmaas-plugin-netmon/internal/host"
 	"github.com/gosnmp/gosnmp"
+	probing "github.com/prometheus-community/pro-bing"
 )
 
 var oids = [...]string{
@@ -77,6 +78,97 @@ func (mt *Task) randomDelay(maxDelay int64) bool {
 
 func (mt *Task) scan() {
 	fmt.Printf("monitoring task [%s]: Scanning\n", mt.targetName)
+
+	scanStartTime := time.Now()
+
+	data := common.HostData{
+		LastUpdateTime: scanStartTime,
+	}
+
+	if mt.host.PingEnabled() {
+		mt.pingProbe(&data)
+	}
+
+	if mt.host.SnmpEnabled() {
+		mt.snmpScan(&data)
+	}
+
+	// Update the host instance with the retrieved data
+	//fmt.Printf("monitoring task [%s]: calling updateHostFn\n", mt.targetName)
+	mt.updateHostFn(mt.host, data)
+	//fmt.Printf("monitoring task [%s]: finished updateHostFn\n", mt.targetName)
+}
+
+func (mt *Task) pingProbe(data *common.HostData) {
+	fmt.Printf("monitoring task [%s]: Pinging\n", mt.targetName)
+	pinger, cancelFn, err := mt.createPinger(mt.targetAddress)
+
+	if err != nil {
+		fmt.Printf("monitoring task [%s]: Failed to create pinger: %s\n", mt.targetName, err)
+		data.PingStatus = fmt.Sprintf("Unable to ping: %s", err)
+		return
+	}
+
+	defer cancelFn()
+	err = pinger.Run()
+
+	if err != nil {
+		fmt.Printf("monitoring task [%s]: Failed to ping: %s\n", mt.targetName, err)
+		data.PingStatus = fmt.Sprintf("Unable to ping: %s", err)
+		return
+	}
+
+	stats := pinger.Statistics()
+
+	if stats.PacketsSent == 0 {
+		data.PingStatus = "Cancelled"
+		return
+	}
+
+	data.PingPacketsSent = stats.PacketsSent
+
+	if stats.PacketLoss >= 100 {
+		data.PingStatus = "Timeout"
+	} else {
+		data.PingStatus = "OK"
+	}
+
+	data.PingPacketLoss = stats.PacketLoss
+	data.PingRttAvg = stats.AvgRtt
+	data.PingRttMin = stats.MinRtt
+	data.PingRttMax = stats.MaxRtt
+	data.PingRttStdDev = stats.StdDevRtt
+}
+
+func (mt *Task) createPinger(targetAddress string) (*probing.Pinger, context.CancelFunc, error) {
+	pinger, err := probing.NewPinger(targetAddress)
+
+	if err != nil {
+		return nil, nil, err
+	}
+
+	pinger.Count = mt.host.PingCount()
+	pinger.Timeout = time.Duration(mt.host.PingTimeoutSeconds()) * time.Second
+
+	if mt.host.PingUseIcmp() {
+		pinger.SetPrivileged(true)
+	}
+
+	// Create a child context that will be marked done either via the task's context, or when
+	// the function completes.
+	ctx, cancelFn := context.WithCancel(mt.ctx)
+
+	go func() {
+		<-ctx.Done()
+		// Stop is idempotent.  It can be called when the pinger completes Run naturally,
+		// with no ill effect.
+		pinger.Stop()
+	}()
+
+	return pinger, cancelFn, nil
+}
+
+func (mt *Task) snmpScan(data *common.HostData) {
 	target := &gosnmp.GoSNMP{
 		Context:            mt.ctx,
 		Target:             mt.targetAddress,
@@ -89,13 +181,12 @@ func (mt *Task) scan() {
 		ExponentialTimeout: false,
 		MaxOids:            gosnmp.MaxOids,
 	}
-
 	scanStartTime := time.Now()
-
 	err := target.Connect()
 
 	if err != nil {
 		fmt.Printf("monitoring task [%s]: Unable to connect: %v\n", mt.targetName, err)
+		data.SnmpStatus = fmt.Sprintf("Unable to connect: %v", err)
 		return
 	}
 
@@ -110,43 +201,36 @@ func (mt *Task) scan() {
 		//fmt.Printf("monitoring task [%s]: Closed gosnmp instance\n", mt.targetName)
 	}()
 
-	data := common.HostData{
-		LastUpdateTime: time.Now(),
-	}
+	uptimeSuccess := mt.getUptime(target, data)
+	ifTableSuccess := mt.getIfTable(target, data, mt.lastInterfaceCount)
+	ifXTableSuccess := mt.getIfXTable(target, data)
+	ipAddressTableSuccess := mt.getIpAddressTable(target, data)
 
-	mt.getUptime(target, &data)
-	mt.getIfTable(target, &data, mt.lastInterfaceCount)
-	mt.getIfXTable(target, &data)
-
-	fmt.Printf("monitoring task [%s]: Getting IpAddressTable\n", mt.targetName)
-	success := mt.getIpAddressTable(target, &data)
-	fmt.Printf("monitoring task [%s]: Finished IpAddressTable\n", mt.targetName)
-
-	if !success {
+	if !ipAddressTableSuccess {
 		// There's no need to get the deprecated IPv4-MIB::IpAddrTable if the host supports the
 		// newer IP-MIB::IpAddressTable
-		fmt.Printf("monitoring task [%s]: Getting IpAddrTable\n", mt.targetName)
-		mt.getIpAddrTable(target, &data)
-		fmt.Printf("monitoring task [%s]: Finished IpAddrTable\n", mt.targetName)
+		mt.getIpAddrTable(target, data)
 	}
 
 	fmt.Printf("monitoring task [%s]: snmp walk completed in %v\n", mt.targetName, time.Since(scanStartTime))
 
+	if uptimeSuccess || ifTableSuccess || ifXTableSuccess || ipAddressTableSuccess {
+		data.SnmpStatus = "OK"
+		data.SnmpSuccess = true
+	} else {
+		data.SnmpStatus = "Failed to retrieve any data"
+	}
+
 	// Store the count of interfaces so we have it for next time
 	mt.lastInterfaceCount = len(data.IfDataList)
-
-	// Update the host instance with the retrieved data
-	//fmt.Printf("monitoring task [%s]: calling updateHostFn\n", mt.targetName)
-	mt.updateHostFn(mt.host, data)
-	//fmt.Printf("monitoring task [%s]: finished updateHostFn\n", mt.targetName)
 }
 
-func (mt *Task) getUptime(target *gosnmp.GoSNMP, data *common.HostData) {
+func (mt *Task) getUptime(target *gosnmp.GoSNMP, data *common.HostData) bool {
 	result, err := target.Get(oids[:])
 
 	if err != nil {
 		fmt.Printf("monitoring task [%s]: Error retrieving values: %v\n", mt.targetName, err)
-		return
+		return false
 	}
 
 	//fmt.Printf("monitoring task [%s]: retrieved values: %v\n", mt.targetName, result)
@@ -168,6 +252,8 @@ func (mt *Task) getUptime(target *gosnmp.GoSNMP, data *common.HostData) {
 	}
 
 	data.UptimeSeconds = hostUptimeSeconds
+
+	return true
 }
 
 type ifDataSetter[T any] func(T, *common.IfData)
@@ -333,13 +419,14 @@ var ipV4AddrTableParserMap = map[string]*ipAddressTableParserSpec{
 		}},
 }
 
-func (mt *Task) getIfTable(target *gosnmp.GoSNMP, data *common.HostData, previousInterfaceCount int) {
+func (mt *Task) getIfTable(target *gosnmp.GoSNMP, data *common.HostData, previousInterfaceCount int) bool {
 	// Create a slice with entries, not just capacity, we'll write to it by interface index
 	ifData := make([]common.IfData, max(1, previousInterfaceCount))
 
 	var walkFn = func(dataUnit gosnmp.SnmpPDU) error {
 		return mt.processIfTableData(dataUnit, &ifData)
 	}
+
 	triedBulkWalk := mt.useBulkWalk
 
 	// Not all devices support bulk walks, so we use a single walk instead, if needed
@@ -348,7 +435,7 @@ func (mt *Task) getIfTable(target *gosnmp.GoSNMP, data *common.HostData, previou
 
 		if err == nil {
 			data.IfDataList = ifData
-			return
+			return false
 		}
 
 		fmt.Printf("monitoring task [%s]: Error retrieving ifTable via BulkWalk: %v\n", mt.targetName, err)
@@ -373,13 +460,14 @@ func (mt *Task) getIfTable(target *gosnmp.GoSNMP, data *common.HostData, previou
 		}
 	} else {
 		fmt.Printf("monitoring task [%s]: Error retrieving ifTable via Walk: %v\n", mt.targetName, err)
-		return
+		return false
 	}
 
 	data.IfDataList = ifData
+	return true
 }
 
-func (mt *Task) getIfXTable(target *gosnmp.GoSNMP, data *common.HostData) {
+func (mt *Task) getIfXTable(target *gosnmp.GoSNMP, data *common.HostData) bool {
 	var walkFn = func(dataUnit gosnmp.SnmpPDU) error {
 		return mt.processIfXTableData(dataUnit, data.IfDataList)
 	}
@@ -394,7 +482,10 @@ func (mt *Task) getIfXTable(target *gosnmp.GoSNMP, data *common.HostData) {
 
 	if err != nil {
 		fmt.Printf("monitoring task [%s]: Error retrieving ifXTable: %v\n", mt.targetName, err)
+		return false
 	}
+
+	return true
 }
 
 func (mt *Task) getIpAddressTable(target *gosnmp.GoSNMP, data *common.HostData) bool {
