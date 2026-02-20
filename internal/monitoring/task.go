@@ -435,8 +435,10 @@ func (mt *Task) getIfTable(target *gosnmp.GoSNMP, data *common.HostData, previou
 		err := target.BulkWalk(oidIfTable, walkFn)
 
 		if err == nil {
+			// Since we succeeded with bulkwalk, we're done!
 			data.IfDataList = ifData
-			return false
+
+			return dataUnitCount > 0
 		}
 
 		fmt.Printf("monitoring task [%s]: Error retrieving ifTable via BulkWalk: %v\n", mt.targetName, err)
