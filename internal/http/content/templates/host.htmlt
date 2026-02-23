@@ -16,10 +16,10 @@
     <div class="row ping-stats">
         <div class="label">Ping</div>
         <div class="value">{{.PingStatus}} {{.PingPacketsSent}} sent, {{.PingPacketLoss}}% loss</div>
-        <div class="">{{.PingRttAverage}}</div>
-        <div class="">{{.PingRttMin}}</div>
-        <div class="">{{.PingRttMax}}</div>
-        <div class="">{{.PingRttStdDev}}</div>
+        <div class="">{{FormatShortDuration .PingRttAverage}}</div>
+        <div class="">{{FormatShortDuration .PingRttMin}}</div>
+        <div class="">{{FormatShortDuration .PingRttMax}}</div>
+        <div class="">{{FormatShortDuration .PingRttStdDev}}</div>
     </div>
     <div class="interface-container">
         {{range .Interfaces}}

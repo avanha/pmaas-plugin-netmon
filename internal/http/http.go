@@ -3,6 +3,7 @@ package http
 import (
 	"embed"
 	"fmt"
+	"math"
 	"net/http"
 	"reflect"
 	"slices"
@@ -130,6 +131,45 @@ func FormatDuration(duration time.Duration) string {
 		days, daysWord, hours, hoursWord, minutes, minutesWord, seconds, secondsWord)
 }
 
+func FormatShortDuration(duration time.Duration) string {
+	seconds := duration / time.Second
+
+	if seconds >= 1 {
+		if seconds >= 10 {
+			return fmt.Sprintf("%ds", seconds)
+		}
+
+		duration %= time.Second
+		millis := duration / time.Millisecond
+
+		if millis == 0 {
+			return fmt.Sprintf("%ds", seconds)
+		}
+
+		return fmt.Sprintf("%d.%ds", seconds, int64(math.Round(float64(millis)/float64(10))))
+	}
+
+	millis := duration / time.Millisecond
+
+	if millis >= 1 {
+		if millis >= 10 {
+			return fmt.Sprintf("%dms", millis)
+		}
+
+		duration %= time.Millisecond
+		micros := duration / time.Microsecond
+
+		if micros == 0 {
+			return fmt.Sprintf("%dms", millis)
+		}
+
+		return fmt.Sprintf("%d.%dms", millis, int64(math.Round(float64(micros)/float64(10))))
+	}
+
+	return fmt.Sprintf("%dμs", duration.Microseconds())
+
+}
+
 var hostTemplate = spi.TemplateInfo{
 	Name:   "host",
 	Paths:  []string{"templates/host.htmlt"},
@@ -137,6 +177,7 @@ var hostTemplate = spi.TemplateInfo{
 	FuncMap: template.FuncMap{
 		"RenderHostInterface": RenderHostInterface,
 		"FormatDuration":      FormatDuration,
+		"FormatShortDuration": FormatShortDuration,
 	},
 }
 
