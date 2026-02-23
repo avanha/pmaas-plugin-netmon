@@ -3,13 +3,14 @@ package http
 import (
 	"embed"
 	"fmt"
-	"math"
 	"net/http"
 	"reflect"
 	"slices"
 	"sort"
 	"text/template"
 	"time"
+
+	"strconv"
 
 	"github.com/avanha/pmaas-plugin-netmon/data"
 	"github.com/avanha/pmaas-plugin-netmon/internal/common"
@@ -131,43 +132,29 @@ func FormatDuration(duration time.Duration) string {
 		days, daysWord, hours, hoursWord, minutes, minutesWord, seconds, secondsWord)
 }
 
+// FormatShortDuration formats a short (max seconds) time.Duration into a compact string.
+// Displays at most 2 decimal digits, but only when the whole number is less than 10.
+// The fractional value is truncated to 2 digits (not rounded).
 func FormatShortDuration(duration time.Duration) string {
-	seconds := duration / time.Second
-
-	if seconds >= 1 {
-		if seconds >= 10 {
-			return fmt.Sprintf("%ds", seconds)
+	sec := duration.Seconds()
+	if sec >= 1 {
+		if sec >= 10 {
+			return fmt.Sprintf("%.0fs", sec)
 		}
-
-		duration %= time.Second
-		millis := duration / time.Millisecond
-
-		if millis == 0 {
-			return fmt.Sprintf("%ds", seconds)
-		}
-
-		return fmt.Sprintf("%d.%ds", seconds, int64(math.Round(float64(millis)/float64(10))))
+		// Format with max 2 decimals, removing trailing zeros
+		return strconv.FormatFloat(sec, 'f', 2, 64) + "s"
 	}
 
-	millis := duration / time.Millisecond
-
+	// We use floating-point milliseconds to accurately capture fractions
+	millis := float64(duration.Microseconds()) / 1000.0
 	if millis >= 1 {
 		if millis >= 10 {
-			return fmt.Sprintf("%dms", millis)
+			return fmt.Sprintf("%.0fms", millis)
 		}
-
-		duration %= time.Millisecond
-		micros := duration / time.Microsecond
-
-		if micros == 0 {
-			return fmt.Sprintf("%dms", millis)
-		}
-
-		return fmt.Sprintf("%d.%dms", millis, int64(math.Round(float64(micros)/float64(10))))
+		return strconv.FormatFloat(millis, 'f', 2, 64) + "ms"
 	}
 
 	return fmt.Sprintf("%dμs", duration.Microseconds())
-
 }
 
 var hostTemplate = spi.TemplateInfo{

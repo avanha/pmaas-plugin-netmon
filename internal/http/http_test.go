@@ -48,7 +48,7 @@ func TestFormatShortDuration_MultipleWholeMillisecond_ReturnsWholeMilliseconds(t
 func TestFormatShortDuration_MultipleMillisecondsAndMicros_ReturnsFractionalMillis(t *testing.T) {
 	d := 9*time.Millisecond + 125*time.Microsecond
 	result := FormatShortDuration(d)
-	var expected = "9.13ms"
+	var expected = "9.12ms"
 
 	if result != expected {
 		t.Errorf("Expected %s, got %s", expected, result)
