@@ -11,7 +11,10 @@ import (
 	netmonevents "github.com/avanha/pmaas-plugin-netmon/events"
 	"github.com/avanha/pmaas-plugin-netmon/internal/common"
 	"github.com/avanha/pmaas-plugin-netmon/internal/netinterface"
+	spi "github.com/avanha/pmaas-spi"
+	spicommon "github.com/avanha/pmaas-spi/common"
 	spievents "github.com/avanha/pmaas-spi/events"
+	"github.com/avanha/pmaas-spi/tracking"
 )
 
 const (
@@ -21,18 +24,21 @@ const (
 )
 
 type Host struct {
-	id            string
-	config        config.Host
-	netInterfaces map[string]*netinterface.NetInterface
-	pmassEntityId string
-	data          data.HostData
+	id             string
+	config         config.Host
+	netInterfaces  map[string]*netinterface.NetInterface
+	pmassEntityId  string
+	trackingConfig tracking.Config
+	data           data.HostData
+	stub           *stub
 }
 
-func NewHost(id string, config config.Host) *Host {
+func NewHost(id string, config config.Host, trackingConfig tracking.Config) *Host {
 	return &Host{
-		id:            id,
-		config:        config,
-		netInterfaces: make(map[string]*netinterface.NetInterface),
+		id:             id,
+		config:         config,
+		trackingConfig: trackingConfig,
+		netInterfaces:  make(map[string]*netinterface.NetInterface),
 		data: data.HostData{
 			Name:      config.Name,
 			IpAddress: config.IpAddress,
@@ -80,6 +86,10 @@ func (h *Host) SnmpEnabled() bool {
 	return h.config.SnmpEnabled
 }
 
+func (h *Host) TrackingConfig() tracking.Config {
+	return h.trackingConfig
+}
+
 func (h *Host) ClearPmaasEntityId() {
 	h.pmassEntityId = ""
 }
@@ -90,6 +100,26 @@ func (h *Host) SetPmaasEntityId(pmassEntityId string) {
 	}
 
 	h.pmassEntityId = pmassEntityId
+}
+
+func (h *Host) GetStub(container spi.IPMAASContainer) entities.Host {
+	if h.stub == nil {
+		h.stub = newHostStub(
+			h.id,
+			&spicommon.ThreadSafeEntityWrapper[entities.Host]{
+				Container: container,
+				Entity:    h,
+			})
+	}
+
+	return h.stub
+}
+
+func (h *Host) CloseStubIfPresent() {
+	if h.stub != nil {
+		h.stub.close()
+		h.stub = nil
+	}
 }
 
 func (h *Host) AddNetInterface(key string, netInterface *netinterface.NetInterface) {
@@ -191,7 +221,14 @@ func calcReachability(pingReachability, snmpReachability int) int {
 	return ReachabilityUnreachable
 }
 
-func (h *Host) Data() data.HostData {
+func (h *Host) Data() tracking.DataSample {
+	return tracking.DataSample{
+		LastUpdateTime: h.data.LastUpdateTime,
+		Data:           h.data,
+	}
+}
+
+func (h *Host) HostData() data.HostData {
 	return h.data
 }
 

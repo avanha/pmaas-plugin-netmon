@@ -82,9 +82,17 @@ func (p *plugin) processConfig() {
 		PollIntervalSeconds: 60,
 	}
 	for _, configuredHost := range p.config.Hosts {
+		hostTrackingConfig := defaultTrackingConfig.Clone()
+		hostTrackingConfig.Name = fmt.Sprintf(
+			"host_%s",
+			strings.Replace(configuredHost.Name, "-", "_", -1))
+		hostTrackingConfig.Schema = tracking.Schema{
+			DataStructType:     data.HostDataType,
+			InsertArgFactoryFn: data.HostDataToInsertArgs,
+		}
 		hostInstance := host.NewHost(
 			fmt.Sprintf("Host_%v", p.nextEntityId()),
-			configuredHost)
+			configuredHost, hostTrackingConfig)
 		p.hosts = append(p.hosts, hostInstance)
 		for key, configuredNetInterface := range configuredHost.NetInterfaces {
 			trackingConfig := defaultTrackingConfig.Clone()
@@ -140,7 +148,18 @@ func (p *plugin) startMonitoringGoRoutines() {
 func (p *plugin) registerEntities() {
 	for _, hostInstance := range p.hosts {
 		hostName := hostInstance.Name()
-		hostPmaasId, err := p.container.RegisterEntity(hostInstance.Id(), entities.HostType, hostName, nil)
+
+		// This lambda captures the plugin instance and the hostInstance
+		// and passes it to the entity manager.  However, entities are deregistered on plugin
+		// stop, so this is OK.
+		var hostStubFactoryFn spi.EntityStubFactoryFunc = func() (any, error) {
+			return hostInstance.GetStub(p.container), nil
+		}
+		hostPmaasId, err := p.container.RegisterEntity(
+			hostInstance.Id(),
+			entities.HostType,
+			hostName,
+			hostStubFactoryFn)
 
 		if err != nil {
 			fmt.Printf("Error registering %s: %s\n", err)
@@ -200,6 +219,7 @@ func (p *plugin) deregisterEntities() {
 			fmt.Printf("Error deregistering %s: %s\n", hostInstance.Name(), err)
 		}
 
+		hostInstance.CloseStubIfPresent()
 	}
 }
 
@@ -229,7 +249,7 @@ func (p *plugin) getStatusAndEntities() common.StatusAndEntities {
 	hostData := make([]data.HostData, len(p.hosts))
 
 	for i := 0; i < len(p.hosts); i++ {
-		hostData[i] = p.hosts[i].Data()
+		hostData[i] = p.hosts[i].HostData()
 		hostData[i].NetInterfaceDataList = make([]data.NetInterfaceData, 0)
 
 		for _, netInterface := range p.hosts[i].NetInterfaces() {

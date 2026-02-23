@@ -1,8 +1,13 @@
 package entities
 
-import "reflect"
+import (
+	"reflect"
+
+	"github.com/avanha/pmaas-spi/tracking"
+)
 
 type Host interface {
+	tracking.Trackable
 	Name() string
 }
 
