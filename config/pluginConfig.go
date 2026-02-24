@@ -4,7 +4,7 @@ type PluginConfig struct {
 	Hosts []Host
 }
 
-func (c *PluginConfig) AddHost(name string, ipAddress string) Host {
+func (c *PluginConfig) AddHost(name string, ipAddress string) *Host {
 	host := Host{
 		Name:               name,
 		IpAddress:          ipAddress,
@@ -18,5 +18,5 @@ func (c *PluginConfig) AddHost(name string, ipAddress string) Host {
 
 	c.Hosts = append(c.Hosts, host)
 
-	return host
+	return &c.Hosts[len(c.Hosts)-1]
 }
