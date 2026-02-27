@@ -34,7 +34,7 @@ func NewPluginConfig() config.PluginConfig {
 }
 
 type Plugin interface {
-	spi.IPMAASPlugin2
+	spi.IPMAASPlugin
 }
 
 func NewPlugin(config config.PluginConfig) Plugin {
@@ -59,9 +59,7 @@ func (p *plugin) Start() {
 	p.startMonitoringGoRoutines()
 }
 
-func (p *plugin) Stop() {}
-
-func (p *plugin) StopAsync() chan func() {
+func (p *plugin) Stop() chan func() {
 	fmt.Printf("%T Stopping...\n", p)
 	p.cancel()
 
