@@ -157,6 +157,19 @@ func FormatShortDuration(duration time.Duration) string {
 	return fmt.Sprintf("%dμs", duration.Microseconds())
 }
 
+func FormatReachability(value int) string {
+	switch value {
+	case data.ReachabilityUnreachable:
+		return "Down"
+	case data.ReachabilityReachable:
+		return "Up"
+	case data.ReachabilityUnknown:
+		return "Unknown"
+	default:
+		return "Unknown"
+	}
+}
+
 var hostTemplate = spi.TemplateInfo{
 	Name:   "host",
 	Paths:  []string{"templates/host.htmlt"},
@@ -165,6 +178,7 @@ var hostTemplate = spi.TemplateInfo{
 		"RenderHostInterface": RenderHostInterface,
 		"FormatDuration":      FormatDuration,
 		"FormatShortDuration": FormatShortDuration,
+		"FormatReachability":  FormatReachability,
 	},
 }
 

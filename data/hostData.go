@@ -5,6 +5,12 @@ import (
 	"time"
 )
 
+const (
+	ReachabilityUnknown = iota
+	ReachabilityReachable
+	ReachabilityUnreachable
+)
+
 type HostData struct {
 	Name                          string
 	IpAddress                     string

@@ -17,12 +17,6 @@ import (
 	"github.com/avanha/pmaas-spi/tracking"
 )
 
-const (
-	ReachabilityUnknown = iota
-	ReachabilityReachable
-	ReachabilityUnreachable
-)
-
 type Host struct {
 	id             string
 	config         config.Host
@@ -137,8 +131,8 @@ func (h *Host) Update(newData *common.HostData, events *[]any) {
 		},
 	}
 
-	pingReachability := ReachabilityUnknown
-	snmpReachability := ReachabilityUnknown
+	pingReachability := data.ReachabilityUnknown
+	snmpReachability := data.ReachabilityUnknown
 
 	if h.PingEnabled() && newData.PingPacketsSent > 0 {
 		pingReachability = h.updatePingData(newData, &hostEvent, events)
@@ -151,7 +145,7 @@ func (h *Host) Update(newData *common.HostData, events *[]any) {
 	newReachability := calcReachability(pingReachability, snmpReachability)
 
 	if h.data.Reachability != newReachability {
-		if newReachability == ReachabilityUnreachable {
+		if newReachability == data.ReachabilityUnreachable {
 			h.data.UnreachableStartCount = h.data.UnreachableStartCount + 1
 			h.data.LastUnreachableStartTime = newData.LastUpdateTime
 		}
@@ -195,10 +189,10 @@ func (h *Host) updatePingData(newData *common.HostData, hostEvent *netmonevents.
 	h.data.PingRttStdDev = newData.PingRttStdDev
 
 	if newData.PingPacketLoss == 100 {
-		return ReachabilityUnreachable
+		return data.ReachabilityUnreachable
 	}
 
-	return ReachabilityReachable
+	return data.ReachabilityReachable
 }
 
 func (h *Host) updateSnmpData(newData *common.HostData, hostEvent *netmonevents.HostEvent, events *[]any) int {
@@ -218,23 +212,23 @@ func (h *Host) updateSnmpData(newData *common.HostData, hostEvent *netmonevents.
 	}
 
 	if newData.SnmpSuccess {
-		return ReachabilityReachable
+		return data.ReachabilityReachable
 	}
 
-	return ReachabilityUnreachable
+	return data.ReachabilityUnreachable
 }
 
 func calcReachability(pingReachability, snmpReachability int) int {
-	if pingReachability == ReachabilityReachable || snmpReachability == ReachabilityReachable {
-		return ReachabilityReachable
+	if pingReachability == data.ReachabilityReachable || snmpReachability == data.ReachabilityReachable {
+		return data.ReachabilityReachable
 	}
 
-	if pingReachability == ReachabilityUnknown && snmpReachability == ReachabilityUnknown {
-		return ReachabilityUnknown
+	if pingReachability == data.ReachabilityUnknown && snmpReachability == data.ReachabilityUnknown {
+		return data.ReachabilityUnknown
 	}
 
 	// None were reachable, and at least one status was known to be unreachable, so unreachable it is
-	return ReachabilityUnreachable
+	return data.ReachabilityUnreachable
 }
 
 func (h *Host) Data() tracking.DataSample {

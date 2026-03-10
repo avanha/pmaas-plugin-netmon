@@ -1,9 +1,22 @@
 <div class="entity-netmon-host">
     <div class="row host-info">
-        <div class="name">{{.Name}}</div>
+        <div class="name no-wrap">{{.Name}}</div>
         <div class="ip-address">{{.IpAddress}}</div>
-        <div class="reachability">{{.Reachability}}</div>
-        <div class="last-update-time">{{.LastUpdateTime.Format "2006-01-02 3:04:05 PM"}}</div>
+        <div class="last-update-time no-wrap">{{.LastUpdateTime.Format "2006-01-02 3:04:05 PM"}}</div>
+    </div>
+    <div class="row wrap reachability-info">
+        <div class="reachability">{{FormatReachability .Reachability}}</div>
+        <div class="reachability-change-time no-wrap">since {{.LastReachabilityChangeTime.Format "2006-01-02 3:04:05 PM"}}</div>
+        <div class="row">
+            <div class="label no-wrap"># times down</div>
+            <div class="value">{{.UnreachableStartCount}}</div>
+        </div>
+        {{if  not (.LastUnreachableStartTime.IsZero)}}
+        <div class="row">
+            <div class="label no-wrap">Last down time</div>
+            <div class="value no-wrap">{{.LastUnreachableStartTime.Format "2006-01-02 3:04:05 PM"}}</div>
+        </div>
+        {{end}}
     </div>
     <div class="row relative-uptime">
         <div class="label">Uptime</div>
@@ -21,6 +34,11 @@
         <div class="">{{FormatShortDuration .PingRttMax}}</div>
         <div class="">{{FormatShortDuration .PingRttStdDev}}</div>
     </div>
+    <!--
+    <div class="row ping-events">
+        <div class="">
+    </div>
+    -->
     <div class="interface-container">
         {{range .Interfaces}}
             {{RenderHostInterface .}}
