@@ -151,18 +151,34 @@ func (h *Host) Update(newData *common.HostData, events *[]any) {
 	newReachability := calcReachability(pingReachability, snmpReachability)
 
 	if h.data.Reachability != newReachability {
+		if newReachability == ReachabilityUnreachable {
+			h.data.UnreachableStartCount = h.data.UnreachableStartCount + 1
+			h.data.LastUnreachableStartTime = newData.LastUpdateTime
+		}
+
 		*events = append(*events, netmonevents.HostReachabilityChangeEvent{
 			HostEvent: hostEvent,
 			OldValue:  h.data.Reachability,
 			NewValue:  newReachability,
 		})
 		h.data.Reachability = newReachability
+		h.data.LastReachabilityChangeTime = newData.LastUpdateTime
 	}
 }
 
 func (h *Host) updatePingData(newData *common.HostData, hostEvent *netmonevents.HostEvent, events *[]any) int {
 	h.data.PingStatus = newData.PingStatus
 	h.data.PingPacketsSent = newData.PingPacketsSent
+
+	if newData.PingPacketLoss == 100 && h.data.PingPacketLoss < 100 {
+		h.data.PingUnreachableStartCount = h.data.PingUnreachableStartCount + 1
+		h.data.LastPingUnreachableStartTime = newData.LastUpdateTime
+	} else if newData.PingPacketLoss < 100 && h.data.PingPacketLoss == 0 {
+		h.data.LastPingReachableStartTime = newData.LastUpdateTime
+	}
+	if newData.PingPacketLoss > 0 && newData.PingPacketLoss < 100 {
+		h.data.LastPingPartialPacketLossTime = newData.LastUpdateTime
+	}
 
 	if h.data.PingPacketLoss != newData.PingPacketLoss {
 		*events = append(*events, netmonevents.HostPingPacketLossChangeEvent{
