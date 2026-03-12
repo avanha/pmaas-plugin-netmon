@@ -11,12 +11,15 @@
             <div class="label no-wrap"># times down</div>
             <div class="value">{{.UnreachableStartCount}}</div>
         </div>
-        {{if  not (.LastUnreachableStartTime.IsZero)}}
+
         <div class="row">
             <div class="label no-wrap">Last down time</div>
+            {{if .LastUnreachableStartTime.IsZero}}
+            <div class="value no-wrap">Never</div>
+            {{else}}
             <div class="value no-wrap">{{.LastUnreachableStartTime.Format "2006-01-02 3:04:05 PM"}}</div>
+            {{end}}
         </div>
-        {{end}}
     </div>
     <div class="row relative-uptime">
         <div class="label">Uptime</div>
@@ -34,11 +37,17 @@
         <div class="">{{FormatShortDuration .PingRttMax}}</div>
         <div class="">{{FormatShortDuration .PingRttStdDev}}</div>
     </div>
-    <!--
-    <div class="row ping-events">
-        <div class="">
+    <div class="row wrap ping-events">
+        <div class="row">
+            <div class="label no-wrap">Last partial loss</div>
+            {{if .LastPingPartialPacketLossTime.IsZero}}
+            <div class="value no-wrap">Never</div>
+            {{else}}
+            <div class="value no-wrap">{{.LastPingPartialPacketLossTime.Format "2006-01-02 3:04:05 PM"}}</div>
+            {{end}}
+        </div>
     </div>
-    -->
+
     <div class="interface-container">
         {{range .Interfaces}}
             {{RenderHostInterface .}}
