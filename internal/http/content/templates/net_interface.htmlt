@@ -31,27 +31,27 @@
         {{end}}
     </div>
     <div class="stats">Tx/Rx Stats</div>
-    <div class="row">
+    <div class="row indent">
         <div class="label">Rate</div>
         <div>{{FormatBits (index .BytesOutRateHistory .CurrentHistoryIndex)}}ps</div>
         <div>{{FormatBits (index .BytesInRateHistory .CurrentHistoryIndex)}}ps</div>
     </div>
-    <div class="row">
+    <div class="row indent">
         <div class="label">Bytes</div>
         <div>{{FormatBytes .BytesOut}}</div>
         <div>{{FormatBytes .BytesIn}}</div>
     </div>
-    <div class="row packets">
+    <div class="row indent packets">
         <div class="label">Packets</div>
         <div class="value">{{.PacketsOut}}</div>
         <div class="value">{{.PacketsIn}}</div>
     </div>
-    <div class="row">
+    <div class="row indent">
         <div class="label">Errors</div>
         <div>{{.ErrorsOut}}</div>
         <div>{{.ErrorsIn}}</div>
     </div>
-    <div class="row">
+    <div class="row indent">
         <div class="label">Discards</div>
         <div>{{.DiscardsOut}}</div>
         <div>{{.DiscardsIn}}</div>

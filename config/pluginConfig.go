@@ -10,7 +10,7 @@ func (c *PluginConfig) AddHost(name string, ipAddress string) *Host {
 		IpAddress:          ipAddress,
 		PingEnabled:        true,
 		PingTimeoutSeconds: 10,
-		PingCount:          3,
+		PingCount:          4,
 		PingUseIcmp:        false,
 		SnmpEnabled:        true,
 		NetInterfaces:      make(map[string]*NetInterface),

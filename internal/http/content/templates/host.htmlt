@@ -1,27 +1,27 @@
 <div class="entity-netmon-host">
     <div class="row host-info">
-        <div class="name no-wrap">{{.Name}}</div>
+        <div class="name no-text-wrap">{{.Name}}</div>
         <div class="ip-address">{{.IpAddress}}</div>
-        <div class="last-update-time no-wrap">{{.LastUpdateTime.Format "2006-01-02 3:04:05 PM"}}</div>
+        <div class="last-update-time no-text-wrap">{{.LastUpdateTime.Format "2006-01-02 15:04:05"}}</div>
     </div>
-    <div class="row wrap reachability-info">
-        <div class="reachability">{{FormatReachability .Reachability}}</div>
-        <div class="reachability-change-time no-wrap">since {{.LastReachabilityChangeTime.Format "2006-01-02 3:04:05 PM"}}</div>
+    <div class="row wrap indent reachability-info">
+        <div class="reachability {{ReachabilityClass .Reachability}}">{{FormatReachability .Reachability}}</div>
+        <div class="reachability-change-time no-text-wrap">since {{.LastReachabilityChangeTime.Format "2006-01-02 15:04:05"}}</div>
         <div class="row">
-            <div class="label no-wrap"># times down</div>
+            <div class="label no-text-wrap"># times down</div>
             <div class="value">{{.UnreachableStartCount}}</div>
         </div>
 
         <div class="row">
-            <div class="label no-wrap">Last down time</div>
+            <div class="label no-text-wrap">Last down time</div>
             {{if .LastUnreachableStartTime.IsZero}}
-            <div class="value no-wrap">Never</div>
+            <div class="value no-text-wrap">Never</div>
             {{else}}
-            <div class="value no-wrap">{{.LastUnreachableStartTime.Format "2006-01-02 3:04:05 PM"}}</div>
+            <div class="value no-text-wrap">{{.LastUnreachableStartTime.Format "2006-01-02 15:04:05"}}</div>
             {{end}}
         </div>
     </div>
-    <div class="row relative-uptime">
+    <div class="row relative-uptime v-gap">
         <div class="label">Uptime</div>
         {{if eq .RelativeUptime 0}}
             <div class="value">Unknown</div>
@@ -29,25 +29,41 @@
             <div>{{FormatDuration .RelativeUptime}}</div>
         {{end}}
     </div>
-    <div class="row ping-stats">
+    <div class="row ping-stats v-gap">
         <div class="label">Ping</div>
-        <div class="value">{{.PingStatus}} {{.PingPacketsSent}} sent, {{.PingPacketLoss}}% loss</div>
-        <div class="">{{FormatShortDuration .PingRttAverage}}</div>
-        <div class="">{{FormatShortDuration .PingRttMin}}</div>
-        <div class="">{{FormatShortDuration .PingRttMax}}</div>
-        <div class="">{{FormatShortDuration .PingRttStdDev}}</div>
+        <div class="value">{{.PingStatus}}, {{.PingPacketsSent}} sent, {{printf "%.0f" .PingPacketLoss}}% loss</div>
+        <div class="no-text-wrap" title="Average">{{FormatShortDuration .PingRttAverage}}</div>
+        <div class="no-text-wrap" title="Min">{{FormatShortDuration .PingRttMin}}</div>
+        <div class="no-text-wrap" title="Max">{{FormatShortDuration .PingRttMax}}</div>
+        <div class="no-text-wrap" title="StdDev">{{FormatShortDuration .PingRttStdDev}}</div>
     </div>
-    <div class="row wrap ping-events">
+    <div class="row indent wrap ping-events">
+        <div class="no-text-wrap">Recent Events -</div>
         <div class="row">
-            <div class="label no-wrap">Last partial loss</div>
+            <div class="label no-text-wrap">Partial loss</div>
             {{if .LastPingPartialPacketLossTime.IsZero}}
-            <div class="value no-wrap">Never</div>
+            <div class="value no-text-wrap">Never</div>
             {{else}}
-            <div class="value no-wrap">{{.LastPingPartialPacketLossTime.Format "2006-01-02 3:04:05 PM"}}</div>
+            <div class="value no-text-wrap">{{.LastPingPartialPacketLossTime.Format "2006-01-02 15:04:05"}}</div>
+            {{end}}
+        </div>
+        <div class="row">
+            <div class="label no-text-wrap">Down start</div>
+            {{if .LastPingUnreachableStartTime.IsZero}}
+            <div class="value no-text-wrap">Never</div>
+            {{else}}
+            <div class="value no-text-wrap">{{.LastPingUnreachableStartTime.Format "2006-01-02 15:04:05"}}</div>
+            {{end}}
+        </div>
+        <div class="row">
+            <div class="label no-text-wrap">Up start</div>
+            {{if .LastPingReachableStartTime.IsZero}}
+            <div class="value no-text-wrap">Never</div>
+            {{else}}
+            <div class="value no-text-wrap">{{.LastPingReachableStartTime.Format "2006-01-02 15:04:05"}}</div>
             {{end}}
         </div>
     </div>
-
     <div class="interface-container">
         {{range .Interfaces}}
             {{RenderHostInterface .}}

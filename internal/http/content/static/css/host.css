@@ -3,8 +3,16 @@
     flex-flow: column;
 }
 
-.entity-netmon-host .no-wrap {
+.entity-netmon-host .no-text-wrap {
     white-space: nowrap;
+}
+
+.entity-netmon-host .indent {
+    margin-left: 5px;
+}
+
+.entity-netmon-host .v-gap {
+    margin-top: 7px;
 }
 
 .entity-netmon-host .row {
@@ -32,9 +40,23 @@
     margin-left: auto;
 }
 
-.entity-netmon-host .relative-uptime {
-    margin-top: 7px;
+.entity-netmon-host .reachability-info .reachability {
+    font-weight: bold;
+    margin-right: 5px;
 }
+
+.entity-netmon-host .reachability-info .reachability.reachable {
+    color: #0f6e16
+}
+
+.entity-netmon-host .reachability-info .reachability.unreachable {
+    color: #9f1515
+}
+
+.entity-netmon-host .reachability-info .reachability.unknown {
+    color: #737171
+}
+
 
 .entity-netmon-host .interface-container {
     display: flex;

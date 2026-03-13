@@ -170,6 +170,19 @@ func FormatReachability(value int) string {
 	}
 }
 
+func ReachabilityClass(value int) string {
+	switch value {
+	case data.ReachabilityUnreachable:
+		return "unreachable"
+	case data.ReachabilityReachable:
+		return "reachable"
+	case data.ReachabilityUnknown:
+		return "unknown"
+	default:
+		return "unknown"
+	}
+}
+
 var hostTemplate = spi.TemplateInfo{
 	Name:   "host",
 	Paths:  []string{"templates/host.htmlt"},
@@ -179,6 +192,7 @@ var hostTemplate = spi.TemplateInfo{
 		"FormatDuration":      FormatDuration,
 		"FormatShortDuration": FormatShortDuration,
 		"FormatReachability":  FormatReachability,
+		"ReachabilityClass":   ReachabilityClass,
 	},
 }
 
