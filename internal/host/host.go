@@ -167,9 +167,10 @@ func (h *Host) updatePingData(newData *common.HostData, hostEvent *netmonevents.
 	if newData.PingPacketLoss == 100 && h.data.PingPacketLoss < 100 {
 		h.data.PingUnreachableStartCount = h.data.PingUnreachableStartCount + 1
 		h.data.LastPingUnreachableStartTime = newData.LastUpdateTime
-	} else if newData.PingPacketLoss < 100 && h.data.PingPacketLoss == 0 {
+	} else if newData.PingPacketLoss < 100.0 && h.data.PingPacketLoss == 100.0 {
 		h.data.LastPingReachableStartTime = newData.LastUpdateTime
 	}
+
 	if newData.PingPacketLoss > 0 && newData.PingPacketLoss < 100 {
 		h.data.LastPingPartialPacketLossTime = newData.LastUpdateTime
 	}
