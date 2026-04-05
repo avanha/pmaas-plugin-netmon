@@ -238,21 +238,26 @@ func (n *NetInterface) updateTrafficStats(
 	newPacketsOut := ifData.GetAllOutPackets()
 
 	if elapsedSeconds != 0 {
+		var deltaBytesIn, deltaBytesOut uint64
+
 		if uptimeSeconds <= elapsedSeconds {
 			// The device restarted, so counters reset
-			n.data.BytesInRateHistory[n.data.CurrentHistoryIndex] = newBytesIn / elapsedSeconds
-			n.data.BytesOutRateHistory[n.data.CurrentHistoryIndex] = newBytesOut / elapsedSeconds
-		} else if newBytesIn < currentBytesIn || currentBytesOut < currentBytesOut {
+			deltaBytesIn = newBytesIn
+			deltaBytesOut = newBytesOut
+		} else if newBytesIn < currentBytesIn || newBytesOut < currentBytesOut {
 			// This indicates a rollover.  We need to grab the max value from ifData since it can differ by source:
 			// ifTable uses 32-bit vaues, while ifXTable uses 64-bit values.
-			n.data.BytesInRateHistory[n.data.CurrentHistoryIndex] =
-				(ifData.GetInOctetsMaxValue() - currentBytesIn + newBytesIn) / elapsedSeconds
-			n.data.BytesInRateHistory[n.data.CurrentHistoryIndex] =
-				(ifData.GetOutOctetsMaxValue() - currentBytesOut + currentBytesOut) / elapsedSeconds
+			deltaBytesIn = ifData.GetInOctetsMaxValue() - currentBytesIn + newBytesIn
+			deltaBytesOut = ifData.GetOutOctetsMaxValue() - currentBytesOut + newBytesOut
 		} else {
-			n.data.BytesInRateHistory[n.data.CurrentHistoryIndex] = (newBytesIn - currentBytesIn) / elapsedSeconds
-			n.data.BytesOutRateHistory[n.data.CurrentHistoryIndex] = (newBytesOut - currentBytesOut) / elapsedSeconds
+			deltaBytesIn = newBytesIn - currentBytesIn
+			deltaBytesOut = newBytesOut - currentBytesOut
 		}
+
+		n.data.BytesInRateHistory[n.data.CurrentHistoryIndex] = deltaBytesIn / elapsedSeconds
+		n.data.BytesOutRateHistory[n.data.CurrentHistoryIndex] = deltaBytesOut / elapsedSeconds
+
+		n.updateDailyTotals(n.data.LastUpdateTime, elapsedSeconds, deltaBytesIn, deltaBytesOut)
 	}
 
 	if currentBytesIn != newBytesIn ||
@@ -276,6 +281,54 @@ func (n *NetInterface) updateTrafficStats(
 		n.data.PacketsIn = newPacketsIn
 		n.data.PacketsOut = newPacketsOut
 	}
+}
+
+// updateDailyTotals tracks the total incoming and outgoing bytes on a daily basis.
+// It uses linear interpolation to accurately distribute the traffic across days
+// if the given time interval crosses one or more midnight boundaries.
+func (n *NetInterface) updateDailyTotals(now time.Time, elapsedSeconds uint64, deltaBytesIn uint64, deltaBytesOut uint64) {
+	if elapsedSeconds == 0 {
+		return
+	}
+
+	// Determine the start time of the interval
+	prevTime := now.Add(-time.Duration(elapsedSeconds) * time.Second)
+
+	// Calculate average rates to distribute traffic accurately across days
+	bytesInPerSec := float64(deltaBytesIn) / float64(elapsedSeconds)
+	bytesOutPerSec := float64(deltaBytesOut) / float64(elapsedSeconds)
+
+	curr := prevTime
+	for {
+		nextDay := time.Date(curr.Year(), curr.Month(), curr.Day()+1, 0, 0, 0, 0, curr.Location())
+		if nextDay.After(now) {
+			// The interval ends before the next midnight, meaning the entire remaining
+			// portion falls within the current day. Update the day's totals and exit.
+			duration := now.Sub(curr).Seconds()
+			n.data.DailyBytesIn[n.data.CurrentDayIndex] += uint64(bytesInPerSec * duration)
+			n.data.DailyBytesOut[n.data.CurrentDayIndex] += uint64(bytesOutPerSec * duration)
+			break
+		} else {
+			// The interval crosses midnight. Calculate the proportional bytes up to
+			// the upcoming midnight and add them to the current day's totals.
+			duration := nextDay.Sub(curr).Seconds()
+			n.data.DailyBytesIn[n.data.CurrentDayIndex] += uint64(bytesInPerSec * duration)
+			n.data.DailyBytesOut[n.data.CurrentDayIndex] += uint64(bytesOutPerSec * duration)
+
+			// Move the ring buffer to the next day and reset the new day's counters
+			n.data.CurrentDayIndex = stepDailyHistoryIndex(n.data.CurrentDayIndex)
+			n.data.DailyBytesIn[n.data.CurrentDayIndex] = 0
+			n.data.DailyBytesOut[n.data.CurrentDayIndex] = 0
+			curr = nextDay
+		}
+	}
+}
+
+func stepDailyHistoryIndex(index uint) uint {
+	if index == data.NetInterfaceDailyHistorySize-1 {
+		return 0
+	}
+	return index + 1
 }
 
 func (n *NetInterface) updateErrorStats(ifData *common.IfData, hostInterfaceEvent *netmonevents.HostInterfaceEvent, events *[]any) {

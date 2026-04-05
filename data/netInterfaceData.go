@@ -10,6 +10,7 @@ import (
 )
 
 const NetInterfaceDataHistorySize = 64
+const NetInterfaceDailyHistorySize = 64
 
 type NetInterfaceData struct {
 	Index                     uint32   `track:"onchange"`
@@ -32,6 +33,9 @@ type NetInterfaceData struct {
 	CurrentHistoryIndex       uint
 	BytesInRateHistory        [NetInterfaceDataHistorySize]uint64
 	BytesOutRateHistory       [NetInterfaceDataHistorySize]uint64
+	CurrentDayIndex           uint
+	DailyBytesIn              [NetInterfaceDailyHistorySize]uint64
+	DailyBytesOut             [NetInterfaceDailyHistorySize]uint64
 }
 
 func (d NetInterfaceData) GetBytesInRateHistory(limit int) []uint64 {
