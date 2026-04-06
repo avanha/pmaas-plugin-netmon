@@ -1,7 +1,6 @@
 package data
 
 import (
-	"math/rand"
 	"net"
 	"os"
 	"slices"
@@ -20,8 +19,6 @@ type globals struct {
 }
 
 var g = globals{}
-
-const Giga = 1024 * 1024 * 1024
 
 func TestMain(m *testing.M) {
 	//largeFloat := big.NewFloat(2.4 * float64(Giga) / 8.0)
@@ -73,19 +70,6 @@ func genRateHistory(forward bool, start int, count int) []uint64 {
 		for i := 0; i < count; i++ {
 			result[i] = uint64((start + NetInterfaceDataHistorySize - i) % NetInterfaceDataHistorySize)
 		}
-	}
-
-	return result
-}
-
-func genRandomRateHistory(minValue int64, maxValue int64) [NetInterfaceDataHistorySize]uint64 {
-	result := [NetInterfaceDataHistorySize]uint64{}
-
-	// Local RNG to avoid shared global state between tests
-	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
-
-	for index := range NetInterfaceDataHistorySize {
-		result[index] = uint64(minValue + rng.Int63n(maxValue-minValue+1))
 	}
 
 	return result
