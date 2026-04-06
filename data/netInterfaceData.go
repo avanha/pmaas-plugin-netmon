@@ -81,6 +81,59 @@ func GetHistory(src *[NetInterfaceDataHistorySize]uint64, currentIndex uint, lim
 	return result
 }
 
+func GetDailyHistory(src *[NetInterfaceDailyHistorySize]uint64, currentIndex int, limit int) []uint64 {
+	// Clamp limit to buffer size
+	if limit > NetInterfaceDailyHistorySize {
+		panic("limit exceeds buffer size")
+	}
+
+	result := make([]uint64, limit)
+
+	// Calculate start index (chronological start)
+	// Logic: End is at currentIndex. Start is 'limit - 1' steps back.
+	// We add 'size' before subtracting to handle the wrap-around case cleanly.
+	startIdx := (currentIndex + NetInterfaceDailyHistorySize + 1 - limit) & (NetInterfaceDailyHistorySize - 1)
+
+	// Determine if the range wraps around the end of the buffer
+	firstChunkLen := NetInterfaceDailyHistorySize - startIdx
+
+	if limit <= firstChunkLen {
+		// Contiguous read (no wrap-around)
+		copy(result, src[startIdx:startIdx+limit])
+	} else {
+		// Wrap-around read
+		// 1. Copy from startIdx to the end of the buffer
+		copy(result, src[startIdx:])
+		// 2. Copy the remaining items from the beginning of the buffer
+		copy(result[firstChunkLen:], src[:limit-firstChunkLen])
+	}
+
+	return result
+}
+
+// GetCurrentMonthTotalBytes calculates the total bytes in and out for the current month
+// based on the last update time.
+func (d *NetInterfaceData) GetCurrentMonthTotalBytes() (uint64, uint64) {
+	if d.LastUpdateTime.IsZero() {
+		return 0, 0
+	}
+
+	daysInMonth := d.LastUpdateTime.Day()
+
+	bytesIn := GetDailyHistory(&d.DailyBytesIn, int(d.CurrentDayIndex), daysInMonth)
+	bytesOut := GetDailyHistory(&d.DailyBytesOut, int(d.CurrentDayIndex), daysInMonth)
+
+	var totalIn, totalOut uint64
+	for _, val := range bytesIn {
+		totalIn += val
+	}
+	for _, val := range bytesOut {
+		totalOut += val
+	}
+
+	return totalIn, totalOut
+}
+
 var NetInterfaceDataType = reflect.TypeOf((*NetInterfaceData)(nil)).Elem()
 
 func NetInterfaceDataToInsertArgs(genericDataPointer *any) ([]any, error) {

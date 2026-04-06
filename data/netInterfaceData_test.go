@@ -2,11 +2,14 @@ package data
 
 import (
 	"math/rand"
+	"net"
 	"os"
 	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	commonslices "github.com/avanha/pmaas-common/slices"
 )
 
 type globals struct {
@@ -30,10 +33,15 @@ func TestMain(m *testing.M) {
 	g.localTimeStamp1 = timeStamp.In(location)
 	g.localTimeStamp2 = g.localTimeStamp1.Add(2*time.Hour + 31*time.Minute)
 	g.data = NetInterfaceData{
-		Index:                     1,
-		Name:                      "testName",
-		PhysAddress:               "12:34:56:78:90:AB",
-		IpV4Addresses:             []string{"192.168.1.1", "10.0.0.1"},
+		Index:         1,
+		Name:          "testName",
+		Status:        "Up",
+		PhysAddress:   "12:34:56:78:90:AB",
+		IpV4Addresses: []string{"192.168.1.1", "10.0.0.1"},
+		IpAddresses: []net.IP{
+			net.ParseIP("192.168.1.1"),
+			net.ParseIP("10.0.0.1"),
+			net.ParseIP("::1")},
 		LastIpV4AddressChangeTime: g.localTimeStamp1,
 		BytesIn:                   100,
 		BytesOut:                  200,
@@ -93,8 +101,10 @@ func TestNetInterfaceDataToInsertArgs_ConvertsAllValues(t *testing.T) {
 
 	expectedArgs := []any{g.data.Index,
 		g.data.Name,
+		g.data.Status,
 		g.data.PhysAddress,
 		strings.Join(g.data.IpV4Addresses, ","),
+		strings.Join(commonslices.Apply(g.data.IpAddresses, IpToString), ","),
 		g.data.BytesIn,
 		g.data.BytesOut,
 		g.data.PacketsIn,
@@ -110,9 +120,14 @@ func TestNetInterfaceDataToInsertArgs_ConvertsAllValues(t *testing.T) {
 	}
 }
 
+func IpToString(ipAddress *net.IP) string {
+	return ipAddress.String()
+}
+
 func TestNetInterfaceDataToInsertArgs_ConvertsEmptyStringsToNil(t *testing.T) {
 	g.data.PhysAddress = ""
 	g.data.IpV4Addresses = []string{}
+	g.data.IpAddresses = []net.IP{}
 	g.data.LastUpdateTime = time.Time{}
 
 	var dataAsAny any = g.data
@@ -124,6 +139,8 @@ func TestNetInterfaceDataToInsertArgs_ConvertsEmptyStringsToNil(t *testing.T) {
 
 	expectedArgs := []any{g.data.Index,
 		g.data.Name,
+		g.data.Status,
+		nil,
 		nil,
 		nil,
 		g.data.BytesIn,
@@ -170,5 +187,118 @@ func TestNetInterfaceDataBytesInRateHistory_midpointInHistoryBuffer_subset_retur
 
 	if !slices.Equal(expected, actual) {
 		t.Errorf("Expected %v, got %v", expected, actual)
+	}
+}
+
+func TestNetInterfaceDataGetDailyHistory_ContiguousRead(t *testing.T) {
+	var src [NetInterfaceDailyHistorySize]uint64
+	for i := 0; i < NetInterfaceDailyHistorySize; i++ {
+		src[i] = uint64(i)
+	}
+
+	// Read 5 items ending at index 10. Start index should be 6.
+	actual := GetDailyHistory(&src, 10, 5)
+	expected := []uint64{6, 7, 8, 9, 10}
+
+	if !slices.Equal(actual, expected) {
+		t.Errorf("Expected %v, got %v", expected, actual)
+	}
+}
+
+func TestNetInterfaceDataGetDailyHistory_WrapAround(t *testing.T) {
+	var src [NetInterfaceDailyHistorySize]uint64
+	for i := 0; i < NetInterfaceDailyHistorySize; i++ {
+		src[i] = uint64(i)
+	}
+
+	// Read 5 items ending at index 2. Start index should be 62 (for size 64).
+	actual := GetDailyHistory(&src, 2, 5)
+	expected := []uint64{62, 63, 0, 1, 2}
+
+	if !slices.Equal(actual, expected) {
+		t.Errorf("Expected %v, got %v", expected, actual)
+	}
+}
+
+func TestNetInterfaceDataGetDailyHistory_LimitExceedsBufferSie_Panics(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Errorf("The code did not panic")
+		}
+	}()
+
+	var src [NetInterfaceDailyHistorySize]uint64
+	for i := 0; i < NetInterfaceDailyHistorySize; i++ {
+		src[i] = uint64(i)
+	}
+
+	// Requesting more than the buffer size should clamp to buffer size
+	GetDailyHistory(&src, int(NetInterfaceDailyHistorySize-1), 100)
+}
+
+func TestNetInterfaceDataGetCurrentMonthTotalBytes_Normal(t *testing.T) {
+	d := &NetInterfaceData{}
+
+	// Let's pretend it's the 3rd of the month, so we need to read 3 days
+	d.LastUpdateTime = time.Date(2023, 10, 3, 12, 0, 0, 0, time.UTC)
+	d.CurrentDayIndex = 2 // Index 2 is the 3rd day
+
+	d.DailyBytesIn[0] = 10
+	d.DailyBytesIn[1] = 20
+	d.DailyBytesIn[2] = 30
+	d.DailyBytesOut[0] = 100
+	d.DailyBytesOut[1] = 200
+	d.DailyBytesOut[2] = 300
+
+	// Previous month data shouldn't be included
+	d.DailyBytesIn[63] = 999
+	d.DailyBytesOut[63] = 999
+
+	in, out := d.GetCurrentMonthTotalBytes()
+
+	if in != 60 {
+		t.Errorf("Expected 60 total in, got %d", in)
+	}
+	if out != 600 {
+		t.Errorf("Expected 600 total out, got %d", out)
+	}
+}
+
+func TestNetInterfaceDataGetCurrentMonthTotalBytes_Rollover(t *testing.T) {
+	d := &NetInterfaceData{}
+
+	// Let's pretend it's the 3rd of the month
+	d.LastUpdateTime = time.Date(2023, 10, 3, 12, 0, 0, 0, time.UTC)
+	d.CurrentDayIndex = 1 // Index 1 is the 3rd day. Wrapped around.
+
+	// Day 3 (index 1)
+	d.DailyBytesIn[1] = 30
+	d.DailyBytesOut[1] = 300
+	// Day 2 (index 0)
+	d.DailyBytesIn[0] = 20
+	d.DailyBytesOut[0] = 200
+	// Day 1 (index 63 - rolled over)
+	d.DailyBytesIn[63] = 10
+	d.DailyBytesOut[63] = 100
+
+	// Previous month data shouldn't be included
+	d.DailyBytesIn[62] = 999
+	d.DailyBytesOut[62] = 999
+
+	in, out := d.GetCurrentMonthTotalBytes()
+
+	if in != 60 {
+		t.Errorf("Expected 60 total in, got %d", in)
+	}
+	if out != 600 {
+		t.Errorf("Expected 600 total out, got %d", out)
+	}
+}
+
+func TestNetInterfaceDataGetCurrentMonthTotalBytes_ZeroTime(t *testing.T) {
+	d := &NetInterfaceData{}
+	in, out := d.GetCurrentMonthTotalBytes()
+	if in != 0 || out != 0 {
+		t.Errorf("Expected 0, 0 for zero time, got %d, %d", in, out)
 	}
 }
