@@ -114,6 +114,9 @@ func (n *NetInterface) CloseStubIfPresent() {
 	}
 }
 
+// Update integrates a new poll sample into the interface state and triggers relevant events.
+// This function must only be called when we have new data.  That way unsuccessful poll attempts will not
+// update the LastUpdateTime, and the next successful poll will correctly account for the down period.
 func (n *NetInterface) Update(
 	hostData *common.HostData,
 	ifData *common.IfData,
