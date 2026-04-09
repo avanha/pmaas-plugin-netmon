@@ -50,12 +50,7 @@
     margin-top: 5px;
 }
 
-.entity-netmon-host-net-interface .ip-address-list {
-    display: flex;
-    flex-flow: column nowrap;
-}
-
-.entity-netmon-host-net-interface .ip-address-list .ip-address {
+.entity-netmon-host-net-interface .ip-addresses .ip-address {
     font-size: 10pt;
     line-height: 18px;
     vertical-align: bottom;
@@ -63,6 +58,11 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.entity-netmon-host-net-interface .ip-address-list {
+    display: flex;
+    flex-flow: column nowrap;
 }
 
 .entity-netmon-host-net-interface .stats {

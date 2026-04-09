@@ -37,7 +37,12 @@
         <div>{{FormatBits (index .BytesInRateHistory .CurrentHistoryIndex)}}ps</div>
     </div>
     <div class="row indent">
-        <div class="label">Bytes</div>
+        <div class="label">Month</div>
+        <div>{{FormatBytes (.GetCurrentMonthTotalBytesOut)}}</div>
+        <div>{{FormatBytes (.GetCurrentMonthTotalBytesIn)}}</div>
+    </div>
+    <div class="row indent">
+        <div class="label">Total</div>
         <div>{{FormatBytes .BytesOut}}</div>
         <div>{{FormatBytes .BytesIn}}</div>
     </div>

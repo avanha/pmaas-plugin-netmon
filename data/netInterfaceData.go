@@ -38,11 +38,11 @@ type NetInterfaceData struct {
 	DailyBytesOut             [NetInterfaceDailyHistorySize]uint64
 }
 
-func (d NetInterfaceData) GetBytesInRateHistory(limit int) []uint64 {
+func (d *NetInterfaceData) GetBytesInRateHistory(limit int) []uint64 {
 	return GetHistory(&d.BytesInRateHistory, d.CurrentHistoryIndex, limit)
 }
 
-func (d NetInterfaceData) GetBytesOutRateHistory(limit int) []uint64 {
+func (d *NetInterfaceData) GetBytesOutRateHistory(limit int) []uint64 {
 	return GetHistory(&d.BytesOutRateHistory, d.CurrentHistoryIndex, limit)
 }
 
@@ -109,6 +109,16 @@ func GetDailyHistory(src *[NetInterfaceDailyHistorySize]uint64, currentIndex int
 	}
 
 	return result
+}
+
+func (d *NetInterfaceData) GetCurrentMonthTotalBytesIn() uint64 {
+	in, _ := d.GetCurrentMonthTotalBytes()
+	return in
+}
+
+func (d *NetInterfaceData) GetCurrentMonthTotalBytesOut() uint64 {
+	_, out := d.GetCurrentMonthTotalBytes()
+	return out
 }
 
 // GetCurrentMonthTotalBytes calculates the total bytes in and out for the current month
