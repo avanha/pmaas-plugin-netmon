@@ -64,3 +64,9 @@ func (s *stub) TrackingConfig() tracking.Config {
 		s.entityWrapperReference.Load(),
 		func(target entities.Host) tracking.Config { return target.TrackingConfig() })
 }
+
+func (s *stub) SetHistoryRepo(trackingHistoryRepo tracking.TrackableHistoryRepo) error {
+	return common.ThreadSafeEntityWrapperExecValueFunc(
+		s.entityWrapperReference.Load(),
+		func(target entities.Host) error { return target.SetHistoryRepo(trackingHistoryRepo) })
+}

@@ -7,7 +7,7 @@ import (
 )
 
 type Host interface {
-	tracking.Trackable
+	tracking.HistoryAwareTrackable
 	Name() string
 }
 

@@ -18,13 +18,14 @@ import (
 )
 
 type Host struct {
-	id             string
-	config         config.Host
-	netInterfaces  map[string]*netinterface.NetInterface
-	pmassEntityId  string
-	trackingConfig tracking.Config
-	data           data.HostData
-	stub           *stub
+	id                  string
+	config              config.Host
+	netInterfaces       map[string]*netinterface.NetInterface
+	pmassEntityId       string
+	trackingConfig      tracking.Config
+	trackingHistoryRepo tracking.TrackableHistoryRepo
+	data                data.HostData
+	stub                *stub
 }
 
 func NewHost(id string, config config.Host, trackingConfig tracking.Config) *Host {
@@ -82,6 +83,24 @@ func (h *Host) SnmpEnabled() bool {
 
 func (h *Host) TrackingConfig() tracking.Config {
 	return h.trackingConfig
+}
+
+func (h *Host) Data() tracking.DataSample {
+	return tracking.DataSample{
+		LastUpdateTime: h.data.LastUpdateTime,
+		Data:           h.data,
+	}
+}
+
+func (h *Host) SetHistoryRepo(trackingHistoryRepo tracking.TrackableHistoryRepo) error {
+	newlyAvailable := h.trackingHistoryRepo == nil && trackingHistoryRepo != nil
+	h.trackingHistoryRepo = trackingHistoryRepo
+
+	if newlyAvailable {
+		// TODO: Kick off a sync
+	}
+
+	return nil
 }
 
 func (h *Host) ClearPmaasEntityId() {
@@ -230,13 +249,6 @@ func calcReachability(pingReachability, snmpReachability int) int {
 
 	// None were reachable, and at least one status was known to be unreachable, so unreachable it is
 	return data.ReachabilityUnreachable
-}
-
-func (h *Host) Data() tracking.DataSample {
-	return tracking.DataSample{
-		LastUpdateTime: h.data.LastUpdateTime,
-		Data:           h.data,
-	}
 }
 
 func (h *Host) HostData() data.HostData {
