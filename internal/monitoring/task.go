@@ -47,6 +47,7 @@ func CreateTask(ctx context.Context, host *host.Host, updateHostFn updateHostFun
 
 func (mt *Task) Run() {
 	run := mt.randomDelay(mt.scanIntervalSeconds)
+	mt.host.WaitForInitialLoad()
 	duration := time.Duration(mt.scanIntervalSeconds) * time.Second
 	ticker := time.NewTicker(duration)
 	defer ticker.Stop()

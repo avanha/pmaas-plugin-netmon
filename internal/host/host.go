@@ -18,21 +18,25 @@ import (
 )
 
 type Host struct {
-	id                  string
-	config              config.Host
-	netInterfaces       map[string]*netinterface.NetInterface
-	pmassEntityId       string
-	trackingConfig      tracking.Config
-	trackingHistoryRepo tracking.TrackableHistoryRepo
-	data                data.HostData
-	stub                *stub
+	id                                string
+	config                            config.Host
+	netInterfaces                     map[string]*netinterface.NetInterface
+	pmassEntityId                     string
+	trackingConfig                    tracking.Config
+	container                         spi.IPMAASContainer
+	trackingHistoryRepo               tracking.TrackableHistoryRepo
+	trackingHistoryRepoAvailableCount int
+	loadStateDone                     chan bool
+	data                              data.HostData
+	stub                              *stub
 }
 
-func NewHost(id string, config config.Host, trackingConfig tracking.Config) *Host {
+func NewHost(id string, config config.Host, trackingConfig tracking.Config, container spi.IPMAASContainer) *Host {
 	return &Host{
 		id:             id,
 		config:         config,
 		trackingConfig: trackingConfig,
+		container:      container,
 		netInterfaces:  make(map[string]*netinterface.NetInterface),
 		data: data.HostData{
 			Name:      config.Name,
@@ -96,8 +100,10 @@ func (h *Host) SetHistoryRepo(trackingHistoryRepo tracking.TrackableHistoryRepo)
 	newlyAvailable := h.trackingHistoryRepo == nil && trackingHistoryRepo != nil
 	h.trackingHistoryRepo = trackingHistoryRepo
 
-	if newlyAvailable {
-		// TODO: Kick off a sync
+	if newlyAvailable && h.trackingHistoryRepoAvailableCount == 0 {
+		h.trackingHistoryRepoAvailableCount = h.trackingHistoryRepoAvailableCount + 1
+		h.loadStateDone = make(chan bool)
+		go h.loadStateFromHistory(trackingHistoryRepo)
 	}
 
 	return nil
@@ -317,4 +323,48 @@ func (h *Host) findInterfaceByKey(key string) *netinterface.NetInterface {
 	}
 
 	return nil
+}
+
+func (h *Host) loadStateFromHistory(historyRepo tracking.TrackableHistoryRepo) {
+	result := historyRepo.GetMostRecentSample()
+
+	if result.Error != nil {
+		fmt.Printf("Host [%s]: Unable to load most recent sample: %v\n", h.id, result.Error)
+		h.signalLoadDone(false)
+		return
+	}
+
+	err := h.container.EnqueueOnPluginGoRoutine(func() {
+		h.initFromSample(result.Result.Data.(data.HostData))
+		h.signalLoadDone(true)
+	})
+
+	if err != nil {
+		fmt.Printf("Host [%s]: Unable to process retrieved most recent sample: %v\n", h.id, err)
+		h.signalLoadDone(false)
+	}
+}
+
+func (h *Host) initFromSample(hostData data.HostData) {
+	h.data = hostData
+}
+
+func (h *Host) signalLoadDone(result bool) {
+	h.loadStateDone <- result
+	close(h.loadStateDone)
+	h.loadStateDone = nil
+}
+
+// WaitForInitialLoad blocks until the host's initial load operation is complete if one is in progress.
+// Since this is a blocking call, it must be called from a goroutine other than the plugin's goroutine
+func (h *Host) WaitForInitialLoad() {
+	initLoadDone := h.loadStateDone
+
+	if initLoadDone == nil {
+		return
+	}
+
+	result := <-initLoadDone
+
+	fmt.Printf("Initial load completed, success = %s", result)
 }

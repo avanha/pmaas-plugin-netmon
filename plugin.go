@@ -90,7 +90,7 @@ func (p *plugin) processConfig() {
 		}
 		hostInstance := host.NewHost(
 			fmt.Sprintf("Host_%v", p.nextEntityId()),
-			configuredHost, hostTrackingConfig)
+			configuredHost, hostTrackingConfig, p.container)
 		p.hosts = append(p.hosts, hostInstance)
 		for key, configuredNetInterface := range configuredHost.NetInterfaces {
 			trackingConfig := defaultTrackingConfig.Clone()
