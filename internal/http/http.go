@@ -221,7 +221,7 @@ func (h *Handler) Init(container spi.IPMAASContainer, entityStore common.EntityS
 	h.entityStore = entityStore
 	container.ProvideContentFS(&contentFS, "content")
 	container.EnableStaticContent("static")
-	container.AddRoute("/plugins/netmon/", h.handleHttpListRequest)
+	container.AddRoute("", h.handleHttpListRequest)
 	container.RegisterEntityRenderer(
 		reflect.TypeOf((*hostWithInterfaces)(nil)).Elem(),
 		h.hostDataRendererFactory)

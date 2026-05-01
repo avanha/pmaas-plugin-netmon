@@ -47,6 +47,10 @@ func NewPlugin(config config.PluginConfig) Plugin {
 	return instance
 }
 
+func (p *plugin) ShortName() string {
+	return "netmon"
+}
+
 func (p *plugin) Init(container spi.IPMAASContainer) {
 	p.container = container
 	p.processConfig()
