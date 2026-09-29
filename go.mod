@@ -1,10 +1,10 @@
 module github.com/avanha/pmaas-plugin-netmon
 
-go 1.26
+go 1.27.1
 
-require github.com/avanha/pmaas-common v0.0.2
+require github.com/avanha/pmaas-common v0.0.3
 
-require github.com/avanha/pmaas-spi v0.0.5
+require github.com/avanha/pmaas-spi v0.0.8
 
 require (
 	github.com/gosnmp/gosnmp v1.43.2
