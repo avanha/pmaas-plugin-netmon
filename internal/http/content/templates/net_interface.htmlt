@@ -1,13 +1,13 @@
 <div class="entity-netmon-host-net-interface">
     <div class="name-and-index">
-        <div class="name">{{.Name}}</div>
-        <div class="index">{{.Index}}</div>
-        <div class="status">{{.Status}}</div>
+        <div class="name">{{.Name | html}}</div>
+        <div class="index">{{.Index | html}}</div>
+        <div class="status">{{.Status | html}}</div>
     </div>
     {{if ne .PhysAddress ""}}
         <div class="section-start">
             <div class="label">MAC</div>
-            <div class=indent physical-address>{{.PhysAddress}}</div>
+            <div class=indent physical-address>{{.PhysAddress | html}}</div>
         </div>
     {{end}}
     <div class="ip-addresses">
@@ -17,7 +17,7 @@
         {{else}}
             <div class="ip-address-list">
                 {{ range .IpAddresses }}
-                    <div class="indent ip-address" title="{{.}}">{{.}}</div>
+                    <div class="indent ip-address" title="{{. | html}}">{{. | html}}</div>
                 {{ end }}
             </div>
         {{end}}

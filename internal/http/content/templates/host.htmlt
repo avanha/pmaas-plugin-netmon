@@ -1,7 +1,7 @@
 <div class="entity-netmon-host">
     <div class="row host-info">
-        <div class="name no-text-wrap">{{.Name}}</div>
-        <div class="ip-address">{{.IpAddress}}</div>
+        <div class="name no-text-wrap">{{.Name | html}}</div>
+        <div class="ip-address">{{.IpAddress | html}}</div>
         <div class="last-update-time no-text-wrap">{{.LastUpdateTime.Format "2006-01-02 15:04:05"}}</div>
     </div>
     <div class="row wrap indent reachability-info">
@@ -9,7 +9,7 @@
         <div class="reachability-change-time no-text-wrap">since {{.LastReachabilityChangeTime.Format "2006-01-02 15:04:05"}}</div>
         <div class="row">
             <div class="label no-text-wrap"># times down</div>
-            <div class="value">{{.UnreachableStartCount}}</div>
+            <div class="value">{{.UnreachableStartCount | html}}</div>
         </div>
 
         <div class="row">
@@ -31,7 +31,7 @@
     </div>
     <div class="row ping-stats v-gap">
         <div class="label">Ping</div>
-        <div class="value">{{.PingStatus}}, {{.PingPacketsSent}} sent, {{printf "%.0f" .PingPacketLoss}}% loss</div>
+        <div class="value">{{.PingStatus | html}}, {{.PingPacketsSent}} sent, {{printf "%.0f" .PingPacketLoss}}% loss</div>
         <div class="no-text-wrap" title="Average">{{FormatShortDuration .PingRttAverage}}</div>
         <div class="no-text-wrap" title="Min">{{FormatShortDuration .PingRttMin}}</div>
         <div class="no-text-wrap" title="Max">{{FormatShortDuration .PingRttMax}}</div>
