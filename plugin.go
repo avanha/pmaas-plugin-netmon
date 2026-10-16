@@ -10,7 +10,6 @@ import (
 	"github.com/avanha/pmaas-plugin-netmon/config"
 	"github.com/avanha/pmaas-plugin-netmon/data"
 	"github.com/avanha/pmaas-plugin-netmon/entities"
-	"github.com/avanha/pmaas-plugin-netmon/internal/alerting"
 	"github.com/avanha/pmaas-plugin-netmon/internal/common"
 	"github.com/avanha/pmaas-plugin-netmon/internal/host"
 	"github.com/avanha/pmaas-plugin-netmon/internal/http"
@@ -18,6 +17,7 @@ import (
 	"github.com/avanha/pmaas-plugin-netmon/internal/netinterface"
 	"github.com/avanha/pmaas-spi"
 	"github.com/avanha/pmaas-spi/alert"
+	"github.com/avanha/pmaas-spi/environment"
 	"github.com/avanha/pmaas-spi/tracking"
 )
 
@@ -31,8 +31,8 @@ type plugin struct {
 	entityCounter int
 	httpHandler   *http.Handler
 
-	// trackers remember the alert raised for each host that is to have one, by host name. Owned by the plugin goroutine.
-	trackers map[string]*alerting.Tracker
+	// watches hold the alert for each host that is to have one, by host name. Owned by the plugin goroutine.
+	watches map[string]*alert.OfflineWatch
 }
 
 func NewPluginConfig() config.PluginConfig {
@@ -48,7 +48,7 @@ func NewPlugin(config config.PluginConfig) Plugin {
 	instance := &plugin{
 		config:      config,
 		httpHandler: http.NewHandler(),
-		trackers:    make(map[string]*alerting.Tracker),
+		watches:     make(map[string]*alert.OfflineWatch),
 	}
 
 	return instance
@@ -103,8 +103,8 @@ func (p *plugin) processConfig() {
 			fmt.Sprintf("Host_%v", p.nextEntityId()),
 			*configuredHost, hostTrackingConfig, p.container)
 
-		if _, _, wanted := configuredHost.UnreachableAlert(); wanted {
-			p.trackers[configuredHost.Name] = &alerting.Tracker{}
+		if after, severity, wanted := configuredHost.UnreachableAlert(); wanted {
+			p.watches[configuredHost.Name] = p.unreachableWatch(configuredHost, after, severity)
 		}
 
 		p.hosts = append(p.hosts, hostInstance)
@@ -254,37 +254,40 @@ func (p *plugin) updateHost(hostInstance *host.Host, data *common.HostData) {
 	p.checkUnreachableAlert(hostInstance, data.LastUpdateTime)
 }
 
+// unreachableWatch holds the alert about a host being unreachable: the shared offline alert, worded for a host.
+func (p *plugin) unreachableWatch(configuredHost *config.Host, after time.Duration, severity alert.SeverityFunc) *alert.OfflineWatch {
+	name, address := configuredHost.Name, configuredHost.IpAddress
+
+	return alert.WhenOffline(after, severity).
+		Watch(p.ShortName(), "host-unreachable:"+name, name).
+		WithText(func(since time.Time, down time.Duration) (string, string) {
+			return "Host unreachable: " + name,
+				fmt.Sprintf("%s (%s) has not been reachable since %s, %s ago.",
+					name, address, since.Format("2006-01-02 3:04 PM"), down.Round(time.Second))
+		})
+}
+
 // checkUnreachableAlert raises, escalates or clears the alert about a host being unreachable, if there is to be one, after
 // a poll made at the given time. Runs on the plugin goroutine.
 func (p *plugin) checkUnreachableAlert(hostInstance *host.Host, pollTime time.Time) {
-	tracker := p.trackers[hostInstance.Name()]
-	if tracker == nil {
+	watch := p.watches[hostInstance.Name()]
+	if watch == nil {
 		return
 	}
 
-	after, severity, _ := hostInstance.UnreachableAlert()
 	hostData := hostInstance.HostData()
 
-	action, alertSeverity, down := tracker.Evaluate(
-		alerting.Policy{After: after, Severity: severity},
-		hostData.Reachability, hostData.LastUnreachableStartTime, pollTime)
+	connectivity := environment.ConnectivityUnknown
 
-	key := "host-unreachable:" + hostInstance.Name()
+	switch hostData.Reachability {
+	case data.ReachabilityReachable:
+		connectivity = environment.ConnectivityOnline
+	case data.ReachabilityUnreachable:
+		connectivity = environment.ConnectivityOffline
+	}
 
-	switch action {
-	case alerting.Raise:
-		message := fmt.Sprintf("%s (%s) has not been reachable since %s, %s ago.",
-			hostInstance.Name(), hostInstance.IpAddress(),
-			hostData.LastUnreachableStartTime.Format("2006-01-02 3:04 PM"), down.Round(time.Second))
-
-		if err := alert.Raise(p.container, p.ShortName(), key, alertSeverity,
-			"Host unreachable: "+hostInstance.Name(), message); err != nil {
-			fmt.Printf("%T unable to raise the alert for %s: %v\n", p, hostInstance.Name(), err)
-		}
-	case alerting.Clear:
-		if err := alert.Clear(p.container, p.ShortName(), key); err != nil {
-			fmt.Printf("%T unable to clear the alert for %s: %v\n", p, hostInstance.Name(), err)
-		}
+	if err := watch.Check(p.container, connectivity, hostData.LastUnreachableStartTime, pollTime); err != nil {
+		fmt.Printf("%T unable to update the alert for %s: %v\n", p, hostInstance.Name(), err)
 	}
 }
 
