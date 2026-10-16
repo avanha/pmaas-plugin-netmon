@@ -1,7 +1,7 @@
-github.com/avanha/pmaas-common v0.0.2 h1:av0dwRiNvJ13ETosInPjwy35RQ1YU2xbjAMhttBGpzY=
-github.com/avanha/pmaas-common v0.0.2/go.mod h1:ll3Wm/PB8AnkQjBbw9eqmhm0xt/sojeDH1oPAvuFAPg=
-github.com/avanha/pmaas-spi v0.0.5 h1:mVqnH6Vw8LqROPtlBAW2w4lax0dq6gptZ8GBsFxUmCg=
-github.com/avanha/pmaas-spi v0.0.5/go.mod h1:s5lvpACv61x3H+IimuuK3X/fUtyI5qGKBZDcpIt060o=
+github.com/avanha/pmaas-common v0.0.3 h1:XFagMBTBRpXz/HJK8Rl0fcs0x66Ihf8Leyqc5Cl9kMQ=
+github.com/avanha/pmaas-common v0.0.3/go.mod h1:XkhgGSpKVnLrNbsuQLcuxzczTeMrf+FDZBhfxA+nJAY=
+github.com/avanha/pmaas-spi v0.0.13 h1:PmKqD4cUME8wJhIHwfkWmpWpPnwFRa42G++eBVviPbc=
+github.com/avanha/pmaas-spi v0.0.13/go.mod h1:vKV8Ke5QXei42A4agIgxypbznjLqFQyi2hvqSyoe7c0=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
@@ -14,11 +14,11 @@ github.com/prometheus-community/pro-bing v0.8.0 h1:CEY/g1/AgERRDjxw5P32ikcOgmrSu
 github.com/prometheus-community/pro-bing v0.8.0/go.mod h1:Idyxz8raDO6TgkUN6ByiEGvWJNyQd40kN9ZUeho3lN0=
 github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
-golang.org/x/net v0.52.0 h1:He/TN1l0e4mmR3QqHMT2Xab3Aj3L9qjbhRm78/6jrW0=
-golang.org/x/net v0.52.0/go.mod h1:R1MAz7uMZxVMualyPXb+VaqGSa3LIaUqk0eEt3w36Sw=
+golang.org/x/net v0.59.0 h1:5zfYln+w5XCxwrnMMJPufRgNoXEaGxl0wo5GqPXyues=
+golang.org/x/net v0.59.0/go.mod h1:2DA/G1UfVbCpQPeWTmMPGY7Cs2PkBkwu743bVX5PIVg=
 golang.org/x/sync v0.20.0 h1:e0PTpb7pjO8GAtTs2dQ6jYa5BWYlMuX047Dco/pItO4=
 golang.org/x/sync v0.20.0/go.mod h1:9xrNwdLfx4jkKbNva9FpL6vEN7evnE43NNNJQ2LF3+0=
-golang.org/x/sys v0.42.0 h1:omrd2nAlyT5ESRdCLYdm3+fMfNFE/+Rf4bDIQImRJeo=
-golang.org/x/sys v0.42.0/go.mod h1:4GL1E5IUh+htKOUEOaiffhrAeqysfVGipDYzABqnCmw=
+golang.org/x/sys v0.48.0 h1:bbX/i/6MgT9BVLM9RT1thmxL04yeTAhbEz4SyadbXoo=
+golang.org/x/sys v0.48.0/go.mod h1:hNLxWAXmnKAxqDtdwIYC4bM9oQPEecfsnNMuSxOs3og=
 gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
 gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
