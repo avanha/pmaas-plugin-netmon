@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"iter"
 	"maps"
+	"time"
 
 	"github.com/avanha/pmaas-plugin-netmon/config"
 	"github.com/avanha/pmaas-plugin-netmon/data"
@@ -12,6 +13,7 @@ import (
 	"github.com/avanha/pmaas-plugin-netmon/internal/common"
 	"github.com/avanha/pmaas-plugin-netmon/internal/netinterface"
 	spi "github.com/avanha/pmaas-spi"
+	"github.com/avanha/pmaas-spi/alert"
 	spicommon "github.com/avanha/pmaas-spi/common"
 	spievents "github.com/avanha/pmaas-spi/events"
 	"github.com/avanha/pmaas-spi/tracking"
@@ -83,6 +85,17 @@ func (h *Host) PingTimeoutSeconds() int {
 
 func (h *Host) SnmpEnabled() bool {
 	return h.config.SnmpEnabled
+}
+
+// Prober is what says whether the host is reachable in place of pinging it, or nil to ping it.
+func (h *Host) Prober() config.Prober {
+	return h.config.Prober
+}
+
+// UnreachableAlert is how long the host has to be unreachable before an alert is raised, and how severe it is, or false if
+// there is to be none.
+func (h *Host) UnreachableAlert() (time.Duration, alert.SeverityFunc, bool) {
+	return h.config.UnreachableAlert()
 }
 
 func (h *Host) TrackingConfig() tracking.Config {
@@ -366,5 +379,5 @@ func (h *Host) WaitForInitialLoad() {
 
 	result := <-initLoadDone
 
-	fmt.Printf("Initial load completed, success = %s", result)
+	fmt.Printf("Initial load completed, success = %v\n", result)
 }

@@ -5,16 +5,19 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/avanha/pmaas-plugin-netmon/config"
 	"github.com/avanha/pmaas-plugin-netmon/data"
 	"github.com/avanha/pmaas-plugin-netmon/entities"
+	"github.com/avanha/pmaas-plugin-netmon/internal/alerting"
 	"github.com/avanha/pmaas-plugin-netmon/internal/common"
 	"github.com/avanha/pmaas-plugin-netmon/internal/host"
 	"github.com/avanha/pmaas-plugin-netmon/internal/http"
 	"github.com/avanha/pmaas-plugin-netmon/internal/monitoring"
 	"github.com/avanha/pmaas-plugin-netmon/internal/netinterface"
 	"github.com/avanha/pmaas-spi"
+	"github.com/avanha/pmaas-spi/alert"
 	"github.com/avanha/pmaas-spi/tracking"
 )
 
@@ -27,6 +30,9 @@ type plugin struct {
 	hosts         []*host.Host
 	entityCounter int
 	httpHandler   *http.Handler
+
+	// trackers remember the alert raised for each host that is to have one, by host name. Owned by the plugin goroutine.
+	trackers map[string]*alerting.Tracker
 }
 
 func NewPluginConfig() config.PluginConfig {
@@ -42,6 +48,7 @@ func NewPlugin(config config.PluginConfig) Plugin {
 	instance := &plugin{
 		config:      config,
 		httpHandler: http.NewHandler(),
+		trackers:    make(map[string]*alerting.Tracker),
 	}
 
 	return instance
@@ -94,7 +101,12 @@ func (p *plugin) processConfig() {
 		}
 		hostInstance := host.NewHost(
 			fmt.Sprintf("Host_%v", p.nextEntityId()),
-			configuredHost, hostTrackingConfig, p.container)
+			*configuredHost, hostTrackingConfig, p.container)
+
+		if _, _, wanted := configuredHost.UnreachableAlert(); wanted {
+			p.trackers[configuredHost.Name] = &alerting.Tracker{}
+		}
+
 		p.hosts = append(p.hosts, hostInstance)
 		for key, configuredNetInterface := range configuredHost.NetInterfaces {
 			trackingConfig := defaultTrackingConfig.Clone()
@@ -164,7 +176,7 @@ func (p *plugin) registerEntities() {
 			hostStubFactoryFn)
 
 		if err != nil {
-			fmt.Printf("Error registering %s: %s\n", err)
+			fmt.Printf("Error registering %s: %v\n", hostName, err)
 			continue
 		}
 
@@ -237,6 +249,42 @@ func (p *plugin) updateHost(hostInstance *host.Host, data *common.HostData) {
 	// Broadcast accumulated events
 	for _, event := range events {
 		p.broadcastEvent(hostInstance.PmaasEntityId(), event)
+	}
+
+	p.checkUnreachableAlert(hostInstance, data.LastUpdateTime)
+}
+
+// checkUnreachableAlert raises, escalates or clears the alert about a host being unreachable, if there is to be one, after
+// a poll made at the given time. Runs on the plugin goroutine.
+func (p *plugin) checkUnreachableAlert(hostInstance *host.Host, pollTime time.Time) {
+	tracker := p.trackers[hostInstance.Name()]
+	if tracker == nil {
+		return
+	}
+
+	after, severity, _ := hostInstance.UnreachableAlert()
+	hostData := hostInstance.HostData()
+
+	action, alertSeverity, down := tracker.Evaluate(
+		alerting.Policy{After: after, Severity: severity},
+		hostData.Reachability, hostData.LastUnreachableStartTime, pollTime)
+
+	key := "host-unreachable:" + hostInstance.Name()
+
+	switch action {
+	case alerting.Raise:
+		message := fmt.Sprintf("%s (%s) has not been reachable since %s, %s ago.",
+			hostInstance.Name(), hostInstance.IpAddress(),
+			hostData.LastUnreachableStartTime.Format("2006-01-02 3:04 PM"), down.Round(time.Second))
+
+		if err := alert.Raise(p.container, p.ShortName(), key, alertSeverity,
+			"Host unreachable: "+hostInstance.Name(), message); err != nil {
+			fmt.Printf("%T unable to raise the alert for %s: %v\n", p, hostInstance.Name(), err)
+		}
+	case alerting.Clear:
+		if err := alert.Clear(p.container, p.ShortName(), key); err != nil {
+			fmt.Printf("%T unable to clear the alert for %s: %v\n", p, hostInstance.Name(), err)
+		}
 	}
 }
 

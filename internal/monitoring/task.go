@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/avanha/pmaas-plugin-netmon/config"
 	"github.com/avanha/pmaas-plugin-netmon/internal/common"
 	"github.com/avanha/pmaas-plugin-netmon/internal/host"
 	"github.com/gosnmp/gosnmp"
@@ -86,18 +87,44 @@ func (mt *Task) scan() {
 		LastUpdateTime: scanStartTime,
 	}
 
-	if mt.host.PingEnabled() {
-		mt.pingProbe(&data)
-	}
+	if prober := mt.host.Prober(); prober != nil {
+		mt.proberProbe(prober, &data)
+	} else {
+		if mt.host.PingEnabled() {
+			mt.pingProbe(&data)
+		}
 
-	if mt.host.SnmpEnabled() {
-		mt.snmpScan(&data)
+		if mt.host.SnmpEnabled() {
+			mt.snmpScan(&data)
+		}
 	}
 
 	// Update the host instance with the retrieved data
 	//fmt.Printf("monitoring task [%s]: calling updateHostFn\n", mt.targetName)
 	mt.updateHostFn(mt.host, data)
 	//fmt.Printf("monitoring task [%s]: finished updateHostFn\n", mt.targetName)
+}
+
+// proberProbe asks a prober, and fills in what pinging and SNMP would have: a host that answers answered every packet, and one
+// that doesn't answered none.
+func (mt *Task) proberProbe(prober config.Prober, data *common.HostData) {
+	reachable := prober.Reachable(mt.ctx)
+
+	data.PingPacketsSent = max(mt.host.PingCount(), 1)
+	data.SnmpSuccess = reachable
+
+	if reachable {
+		data.PingStatus = "OK"
+		data.SnmpStatus = "Simulated"
+		data.PingPacketLoss = 0
+		data.PingRttAvg, data.PingRttMin, data.PingRttMax = time.Millisecond, time.Millisecond, time.Millisecond
+
+		return
+	}
+
+	data.PingStatus = "Timeout"
+	data.SnmpStatus = "Simulated: unreachable"
+	data.PingPacketLoss = 100
 }
 
 func (mt *Task) pingProbe(data *common.HostData) {
