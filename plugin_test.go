@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"net/http"
 	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -211,6 +212,11 @@ func TestUnreachableAlert_RaisedAfterTwoMinutesDownAndClearedWhenTheHostIsBack(t
 		if event.Source != "netmon" || event.Key != "host-unreachable:router" || event.Severity != alert.SeverityCritical ||
 			event.Title != "Host unreachable: router" {
 			t.Errorf("raised %+v", event)
+		}
+
+		if !strings.HasPrefix(event.Message, "router (") || !strings.Contains(event.Message, ") has not been reachable since ") ||
+			!strings.HasSuffix(event.Message, "ago.") {
+			t.Errorf("message %q", event.Message)
 		}
 
 		// It came at the first poll two minutes after the first that found it down, and not a poll sooner.
