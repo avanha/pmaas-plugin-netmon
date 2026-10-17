@@ -3,6 +3,7 @@ package netmon
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -31,8 +32,10 @@ type plugin struct {
 	entityCounter int
 	httpHandler   *http.Handler
 
-	// watches hold the alert for each host that is to have one, by host name. Owned by the plugin goroutine.
+	// watches hold the alert for each host that is to have one, by host name, and needs the name of the host each waits for
+	// to be reachable, for those that do. Owned by the plugin goroutine.
 	watches map[string]*alert.OfflineWatch
+	needs   map[string]string
 }
 
 func NewPluginConfig() config.PluginConfig {
@@ -49,6 +52,7 @@ func NewPlugin(config config.PluginConfig) Plugin {
 		config:      config,
 		httpHandler: http.NewHandler(),
 		watches:     make(map[string]*alert.OfflineWatch),
+		needs:       make(map[string]string),
 	}
 
 	return instance
@@ -105,6 +109,15 @@ func (p *plugin) processConfig() {
 
 		if after, severity, wanted := configuredHost.UnreachableAlert(); wanted {
 			p.watches[configuredHost.Name] = p.unreachableWatch(configuredHost, after, severity)
+
+			if other := configuredHost.AlertDependency(); other != nil {
+				if !slices.Contains(p.config.Hosts, other) {
+					panic(fmt.Sprintf("%T: the alert for host %q waits for host %q, which is not one of the plugin's hosts",
+						p, configuredHost.Name, other.Name))
+				}
+
+				p.needs[configuredHost.Name] = other.Name
+			}
 		}
 
 		p.hosts = append(p.hosts, hostInstance)
@@ -267,6 +280,21 @@ func (p *plugin) unreachableWatch(configuredHost *config.Host, after time.Durati
 		})
 }
 
+// reachableSince is when the named host last became reachable, if it is reachable now.
+func (p *plugin) reachableSince(name string) (time.Time, bool) {
+	for _, h := range p.hosts {
+		if h.Name() != name {
+			continue
+		}
+
+		hostData := h.HostData()
+
+		return hostData.LastReachabilityChangeTime, hostData.Reachability == data.ReachabilityReachable
+	}
+
+	return time.Time{}, false
+}
+
 // checkUnreachableAlert raises, escalates or clears the alert about a host being unreachable, if there is to be one, after
 // a poll made at the given time. Runs on the plugin goroutine.
 func (p *plugin) checkUnreachableAlert(hostInstance *host.Host, pollTime time.Time) {
@@ -276,6 +304,7 @@ func (p *plugin) checkUnreachableAlert(hostInstance *host.Host, pollTime time.Ti
 	}
 
 	hostData := hostInstance.HostData()
+	since := hostData.LastUnreachableStartTime
 
 	connectivity := environment.ConnectivityUnknown
 
@@ -286,7 +315,17 @@ func (p *plugin) checkUnreachableAlert(hostInstance *host.Host, pollTime time.Ti
 		connectivity = environment.ConnectivityOffline
 	}
 
-	if err := watch.Check(p.container, connectivity, hostData.LastUnreachableStartTime, pollTime); err != nil {
+	if needed, waits := p.needs[hostInstance.Name()]; waits && connectivity == environment.ConnectivityOffline {
+		reachableSince, reachable := p.reachableSince(needed)
+		if !reachable {
+			// Not known to be up: whatever is wrong with this host is no news, so the alert is left as it is.
+			connectivity = environment.ConnectivityUnknown
+		} else if reachableSince.After(since) {
+			since = reachableSince
+		}
+	}
+
+	if err := watch.Check(p.container, connectivity, since, pollTime); err != nil {
 		fmt.Printf("%T unable to update the alert for %s: %v\n", p, hostInstance.Name(), err)
 	}
 }

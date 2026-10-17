@@ -131,6 +131,13 @@ func (c *fakeContainer) alerts() (raised []broadcast, cleared []broadcast) {
 	return raised, cleared
 }
 
+// alertEvent is the nth alert raised.
+func (c *fakeContainer) alertEvent(n int) alert.RaisedEvent {
+	raised, _ := c.alerts()
+
+	return raised[n].event.(alert.RaisedEvent)
+}
+
 func (c *fakeContainer) reachabilityChanges() []netmonevents.HostReachabilityChangeEvent {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -432,4 +439,194 @@ func TestUnreachableAlert_AHostThatIsOnlyPingedWorksAsWellAsOneThatIsAskedOverSn
 
 		stop(t, p)
 	})
+}
+
+// alertsByKey is the keys of the alerts raised, in order.
+func alertKeys(container *fakeContainer) (raised []string, cleared []string) {
+	r, c := container.alerts()
+
+	for _, b := range r {
+		raised = append(raised, b.event.(alert.RaisedEvent).Key)
+	}
+
+	for _, b := range c {
+		cleared = append(cleared, b.event.(alert.ClearedEvent).Key)
+	}
+
+	return raised, cleared
+}
+
+func twoHosts(routerProber, dnsProber *switchableProber) config.PluginConfig {
+	conf := config.PluginConfig{}
+	router := conf.AddHost("router", "10.0.0.1").UseProber(routerProber).AlertWhenUnreachable(2*time.Minute, nil)
+	conf.AddHost("dns", "10.9.9.9").UseProber(dnsProber).
+		AlertWhenUnreachable(2*time.Minute, alert.Always(alert.SeverityWarning)).
+		AlertOnlyWhileReachable(router)
+
+	return conf
+}
+
+func TestAlertOnlyWhileReachable_ABehindHostThatIsDownWithTheRouterIsNotReportedAtAll(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		routerProber, dnsProber := newProber(true), newProber(true)
+		p, container := started(t, twoHosts(routerProber, dnsProber))
+
+		aLittleLater(5 * time.Minute)
+
+		// Everything goes down together: the router's alert is the one.
+		routerProber.up.Store(false)
+		dnsProber.up.Store(false)
+
+		aLittleLater(30 * time.Minute)
+
+		raised, cleared := alertKeys(container)
+		if len(raised) != 1 || raised[0] != "host-unreachable:router" || len(cleared) != 0 {
+			t.Fatalf("raised %v, cleared %v", raised, cleared)
+		}
+
+		stop(t, p)
+	})
+}
+
+func TestAlertOnlyWhileReachable_ADownHostIsGivenItsWholeTimeAfterTheRouterIsBack(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		routerProber, dnsProber := newProber(true), newProber(true)
+		p, container := started(t, twoHosts(routerProber, dnsProber))
+
+		aLittleLater(5 * time.Minute)
+		routerProber.up.Store(false)
+		dnsProber.up.Store(false)
+		aLittleLater(10 * time.Minute)
+
+		// The router comes back; the other host is still down, and has been for ten minutes, but only because of the router.
+		routerProber.up.Store(true)
+		aLittleLater(115 * time.Second)
+
+		backAt := time.Now()
+
+		if raised, _ := alertKeys(container); len(raised) != 1 {
+			t.Fatalf("raised as soon as the router was back: %v", raised)
+		}
+
+		// Still down two minutes after the router was reachable again: now it is news.
+		aLittleLater(2 * time.Minute)
+
+		raised, _ := alertKeys(container)
+		if len(raised) != 2 || raised[1] != "host-unreachable:dns" {
+			t.Fatalf("raised %v (router back at %v)", raised, backAt)
+		}
+
+		stop(t, p)
+	})
+}
+
+func TestAlertOnlyWhileReachable_AHostThatIsDownAloneIsReportedAsUsual(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		routerProber, dnsProber := newProber(true), newProber(true)
+		p, container := started(t, twoHosts(routerProber, dnsProber))
+
+		aLittleLater(5 * time.Minute)
+		dnsProber.up.Store(false)
+		aLittleLater(5 * time.Minute)
+
+		raised, _ := alertKeys(container)
+		if len(raised) != 1 || raised[0] != "host-unreachable:dns" {
+			t.Fatalf("raised %v", raised)
+		}
+
+		event := container.alertEvent(0)
+		if event.Severity != alert.SeverityWarning {
+			t.Errorf("severity %v", event.Severity)
+		}
+
+		// Back up: cleared.
+		dnsProber.up.Store(true)
+		aLittleLater(2 * time.Minute)
+
+		if _, cleared := alertKeys(container); len(cleared) != 1 || cleared[0] != "host-unreachable:dns" {
+			t.Errorf("cleared %v", cleared)
+		}
+
+		stop(t, p)
+	})
+}
+
+func TestAlertOnlyWhileReachable_AnAlertAlreadyUpIsNotClearedByTheRouterGoingDown(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		routerProber, dnsProber := newProber(true), newProber(true)
+		p, container := started(t, twoHosts(routerProber, dnsProber))
+
+		aLittleLater(5 * time.Minute)
+		dnsProber.up.Store(false)
+		aLittleLater(5 * time.Minute)
+
+		routerProber.up.Store(false)
+		aLittleLater(30 * time.Minute)
+
+		_, cleared := alertKeys(container)
+		if len(cleared) != 0 {
+			t.Errorf("cleared %v", cleared)
+		}
+
+		stop(t, p)
+	})
+}
+
+func TestAlertOnlyWhileReachable_TheRouterNotPolledYetHoldsTheAlertBack(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		// Down from the start, and the router's answer is not known to be up either.
+		routerProber, dnsProber := newProber(false), newProber(false)
+		p, container := started(t, twoHosts(routerProber, dnsProber))
+
+		aLittleLater(20 * time.Minute)
+
+		raised, _ := alertKeys(container)
+		if len(raised) != 1 || raised[0] != "host-unreachable:router" {
+			t.Errorf("raised %v", raised)
+		}
+
+		stop(t, p)
+	})
+}
+
+func TestAlertOnlyWhileReachable_Configuration(t *testing.T) {
+	conf := config.PluginConfig{}
+	router := conf.AddHost("router", "10.0.0.1")
+	other := conf.AddHost("other", "10.0.0.2")
+
+	if other.AlertDependency() != nil {
+		t.Error("a dependency by default")
+	}
+
+	if other.AlertOnlyWhileReachable(router) != other || other.AlertDependency() != router {
+		t.Error("the dependency was not kept")
+	}
+
+	for name, bad := range map[string]func(){
+		"nothing":  func() { other.AlertOnlyWhileReachable(nil) },
+		"itself":   func() { other.AlertOnlyWhileReachable(other) },
+		"outsider": func() { startedWithOutsider() },
+	} {
+		func() {
+			defer func() {
+				if recover() == nil {
+					t.Errorf("%s didn't panic", name)
+				}
+			}()
+
+			bad()
+		}()
+	}
+}
+
+// startedWithOutsider starts a plugin whose host waits for one that was never added to it.
+func startedWithOutsider() {
+	elsewhere := &config.Host{Name: "elsewhere"}
+
+	conf := config.PluginConfig{}
+	conf.AddHost("a", "10.0.0.1").AlertWhenUnreachable(time.Minute, nil).AlertOnlyWhileReachable(elsewhere)
+
+	p := NewPlugin(conf).(*plugin)
+	p.Init(&fakeContainer{})
+	p.Start()
 }
