@@ -4,7 +4,7 @@ go 1.27.1
 
 require (
 	github.com/avanha/pmaas-common v0.0.5
-	github.com/avanha/pmaas-spi v0.0.14
+	github.com/avanha/pmaas-spi v0.0.16
 	github.com/gosnmp/gosnmp v1.43.2
 	github.com/prometheus-community/pro-bing v0.8.0
 )
