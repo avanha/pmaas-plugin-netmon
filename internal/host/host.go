@@ -3,6 +3,7 @@ package host
 import (
 	"fmt"
 	"iter"
+	"log/slog"
 	"maps"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 )
 
 type Host struct {
+	log                               *slog.Logger
 	id                                string
 	config                            config.Host
 	netInterfaces                     map[string]*netinterface.NetInterface
@@ -33,8 +35,9 @@ type Host struct {
 	stub                              *stub
 }
 
-func NewHost(id string, config config.Host, trackingConfig tracking.Config, container spi.IPMAASContainer) *Host {
+func NewHost(log *slog.Logger, id string, config config.Host, trackingConfig tracking.Config, container spi.IPMAASContainer) *Host {
 	return &Host{
+		log:            log,
 		id:             id,
 		config:         config,
 		trackingConfig: trackingConfig,
@@ -137,6 +140,7 @@ func (h *Host) SetPmaasEntityId(pmassEntityId string) {
 func (h *Host) GetStub(container spi.IPMAASContainer) entities.Host {
 	if h.stub == nil {
 		h.stub = newHostStub(
+			h.log,
 			h.id,
 			&spicommon.ThreadSafeEntityWrapper[entities.Host]{
 				Container: container,
@@ -320,7 +324,7 @@ func (h *Host) findInterface(ifData *common.IfData) *netinterface.NetInterface {
 		if iface == nil {
 			//fmt.Printf("%T findInterface by %s failed\n", p, key)
 		} else {
-			fmt.Printf("Host [%s]: findInterface %s succeeded\n", h.config.Name, key)
+			h.log.Debug("found interface", "host", h.config.Name, "key", key)
 			return iface
 		}
 	}
@@ -342,7 +346,7 @@ func (h *Host) loadStateFromHistory(historyRepo tracking.TrackableHistoryRepo) {
 	result := historyRepo.GetMostRecentSample()
 
 	if result.Error != nil {
-		fmt.Printf("Host [%s]: Unable to load most recent sample: %v\n", h.id, result.Error)
+		h.log.Warn("unable to load most recent sample", "host", h.id, "error", result.Error)
 		h.signalLoadDone(false)
 		return
 	}
@@ -353,7 +357,7 @@ func (h *Host) loadStateFromHistory(historyRepo tracking.TrackableHistoryRepo) {
 	})
 
 	if err != nil {
-		fmt.Printf("Host [%s]: Unable to process retrieved most recent sample: %v\n", h.id, err)
+		h.log.Error("unable to process retrieved most recent sample", "host", h.id, "error", err)
 		h.signalLoadDone(false)
 	}
 }
@@ -379,5 +383,5 @@ func (h *Host) WaitForInitialLoad() {
 
 	result := <-initLoadDone
 
-	fmt.Printf("Initial load completed, success = %v\n", result)
+	h.log.Debug("initial load completed", "host", h.id, "success", result)
 }

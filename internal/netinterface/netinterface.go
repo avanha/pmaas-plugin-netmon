@@ -3,6 +3,7 @@ package netinterface
 import (
 	"bytes"
 	"fmt"
+	"log/slog"
 	"net"
 	"slices"
 	"time"
@@ -20,9 +21,10 @@ import (
 	commonslices "github.com/avanha/pmaas-common/slices"
 )
 
-func CreateNetInterface(hostId string,
+func CreateNetInterface(log *slog.Logger, hostId string,
 	id string, trackingConfig tracking.Config, netInterface config.NetInterface) *NetInterface {
 	return &NetInterface{
+		log:            log,
 		id:             id,
 		hostId:         hostId,
 		config:         netInterface,
@@ -35,6 +37,7 @@ func CreateNetInterface(hostId string,
 }
 
 type NetInterface struct {
+	log                                         *slog.Logger
 	id                                          string
 	hostId                                      string
 	trackingConfig                              tracking.Config
@@ -97,6 +100,7 @@ func (n *NetInterface) SetHostPmaasEntityId(pmaasEntityId string) {
 func (n *NetInterface) GetStub(container spi.IPMAASContainer) entities.NetworkInterface {
 	if n.stub == nil {
 		n.stub = newNetInterfaceStub(
+			n.log,
 			n.id,
 			&spicommon.ThreadSafeEntityWrapper[entities.NetworkInterface]{
 				Container: container,
@@ -435,7 +439,7 @@ func (n *NetInterface) DeregisterConfiguredListeners(container spi.IPMAASContain
 	if err == nil {
 		n.onAddressChangeListenersEventReceiverHandle = 0
 	} else {
-		fmt.Printf("Error deregistering receiver for HostInterfaceAddressChangeEvent: %s\n", err)
+		n.log.Error("error deregistering receiver for HostInterfaceAddressChangeEvent", "interface", n.id, "error", err)
 	}
 }
 

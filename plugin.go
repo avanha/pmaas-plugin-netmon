@@ -3,6 +3,8 @@ package netmon
 import (
 	"context"
 	"fmt"
+	"github.com/avanha/pmaas-spi/logging"
+	"log/slog"
 	"slices"
 	"strings"
 	"sync"
@@ -23,6 +25,7 @@ import (
 )
 
 type plugin struct {
+	log           *slog.Logger
 	config        config.PluginConfig
 	container     spi.IPMAASContainer
 	ctx           context.Context
@@ -47,7 +50,6 @@ type Plugin interface {
 }
 
 func NewPlugin(config config.PluginConfig) Plugin {
-	fmt.Printf("New, config: %v\n", config)
 	instance := &plugin{
 		config:      config,
 		httpHandler: http.NewHandler(),
@@ -64,18 +66,20 @@ func (p *plugin) ShortName() string {
 
 func (p *plugin) Init(container spi.IPMAASContainer) {
 	p.container = container
+	p.log = logging.For(container)
+	monitoring.SetValueLogger(logging.For(container, "monitoring"))
 	p.processConfig()
 	p.httpHandler.Init(p.container, &entityStoreAdapter{parent: p})
 }
 
 func (p *plugin) Start() {
-	fmt.Printf("%T Starting...\n", p)
+	p.log.Info("starting")
 	p.registerEntities()
 	p.startMonitoringGoRoutines()
 }
 
 func (p *plugin) Stop() chan func() {
-	fmt.Printf("%T Stopping...\n", p)
+	p.log.Info("stopping")
 	p.cancel()
 
 	// We don't want to block on the pluginRunner goroutine, so start a new goroutine to wait
@@ -104,6 +108,7 @@ func (p *plugin) processConfig() {
 			InsertArgFactoryFn: data.HostDataToInsertArgs,
 		}
 		hostInstance := host.NewHost(
+			logging.For(p.container, "host"),
 			fmt.Sprintf("Host_%v", p.nextEntityId()),
 			*configuredHost, hostTrackingConfig, p.container)
 
@@ -132,6 +137,7 @@ func (p *plugin) processConfig() {
 				InsertArgFactoryFn: data.NetInterfaceDataToInsertArgs,
 			}
 			netInterfaceInstance := netinterface.CreateNetInterface(
+				logging.For(p.container, "netinterface"),
 				hostInstance.Id(),
 				fmt.Sprintf("NetworkInterface_%v", p.nextEntityId()),
 				trackingConfig,
@@ -142,9 +148,9 @@ func (p *plugin) processConfig() {
 }
 
 func (p *plugin) onMonitoringGoRoutinesStopped() {
-	fmt.Printf("%T Monitoring goroutines stopped, deregistering entities\n", p)
+	p.log.Debug("monitoring goroutines stopped, deregistering entities")
 	p.deregisterEntities()
-	fmt.Printf("%T Stopped\n", p)
+	p.log.Info("stopped")
 }
 
 func (p *plugin) nextEntityId() int {
@@ -159,7 +165,7 @@ func (p *plugin) startMonitoringGoRoutines() {
 		})
 
 		if err != nil {
-			fmt.Printf("Error enqueuing updateHost callback: %s\n", err)
+			p.log.Error("error enqueuing updateHost callback", "error", err)
 		}
 	}
 
@@ -167,7 +173,7 @@ func (p *plugin) startMonitoringGoRoutines() {
 	p.ctx, p.cancel = context.WithCancel(context.Background())
 
 	for _, hostInstance := range p.hosts {
-		monitoringTask := monitoring.CreateTask(p.ctx, hostInstance, updateHostFunction)
+		monitoringTask := monitoring.CreateTask(logging.For(p.container, "monitoring"), p.ctx, hostInstance, updateHostFunction)
 		p.monitors.Go(monitoringTask.Run)
 	}
 }
@@ -189,7 +195,7 @@ func (p *plugin) registerEntities() {
 			hostStubFactoryFn)
 
 		if err != nil {
-			fmt.Printf("Error registering %s: %v\n", hostName, err)
+			p.log.Error("error registering host", "host", hostName, "error", err)
 			continue
 		}
 
@@ -212,7 +218,7 @@ func (p *plugin) registerEntities() {
 				stubFactoryFn)
 
 			if err != nil {
-				fmt.Printf("Error registering %s: %s\n", networkInterfaceName, err)
+				p.log.Error("error registering network interface", "interface", networkInterfaceName, "error", err)
 				continue
 			}
 
@@ -231,8 +237,8 @@ func (p *plugin) deregisterEntities() {
 			if err == nil {
 				networkInterfaceInstance.ClearPmaasEntityId()
 			} else {
-				fmt.Printf("Error deregistering %s: %s\n",
-					getInterfaceName(hostInstance, networkInterfaceKey), err)
+				p.log.Error("error deregistering network interface",
+					"interface", getInterfaceName(hostInstance, networkInterfaceKey), "error", err)
 			}
 
 			networkInterfaceInstance.CloseStubIfPresent()
@@ -243,7 +249,7 @@ func (p *plugin) deregisterEntities() {
 		if err == nil {
 			hostInstance.ClearPmaasEntityId()
 		} else {
-			fmt.Printf("Error deregistering %s: %s\n", hostInstance.Name(), err)
+			p.log.Error("error deregistering host", "host", hostInstance.Name(), "error", err)
 		}
 
 		hostInstance.CloseStubIfPresent()
@@ -255,7 +261,7 @@ func getInterfaceName(hostInstance *host.Host, networkInterfaceKey string) strin
 }
 
 func (p *plugin) updateHost(hostInstance *host.Host, data *common.HostData) {
-	fmt.Printf("updateHost %s with %v\n", hostInstance.Name(), data)
+	p.log.Debug("updating host", "host", hostInstance.Name(), "data", data)
 	events := make([]any, 0, 10)
 	hostInstance.Update(data, &events)
 
@@ -326,14 +332,14 @@ func (p *plugin) checkUnreachableAlert(hostInstance *host.Host, pollTime time.Ti
 	}
 
 	if err := watch.Check(p.container, connectivity, since, pollTime); err != nil {
-		fmt.Printf("%T unable to update the alert for %s: %v\n", p, hostInstance.Name(), err)
+		p.log.Error("unable to update the alert", "host", hostInstance.Name(), "error", err)
 	}
 }
 
 func (p *plugin) broadcastEvent(sourceEntityId string, event any) {
 	err := p.container.BroadcastEvent(sourceEntityId, event)
 	if err != nil {
-		fmt.Printf("%T Error broadcasting event %V: %V", p, event, err)
+		p.log.Error("error broadcasting event", "event", event, "error", err)
 	}
 }
 

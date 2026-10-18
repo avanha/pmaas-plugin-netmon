@@ -3,6 +3,7 @@ package monitoring
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"math/rand/v2"
 	"net"
 	"slices"
@@ -24,6 +25,7 @@ var oids = [...]string{
 type updateHostFunc func(host *host.Host, hostData common.HostData)
 
 type Task struct {
+	log                 *slog.Logger
 	ctx                 context.Context
 	scanIntervalSeconds int64
 	useBulkWalk         bool
@@ -34,8 +36,9 @@ type Task struct {
 	updateHostFn        updateHostFunc
 }
 
-func CreateTask(ctx context.Context, host *host.Host, updateHostFn updateHostFunc) Task {
+func CreateTask(log *slog.Logger, ctx context.Context, host *host.Host, updateHostFn updateHostFunc) Task {
 	return Task{
+		log:                 log.With("target", host.Name()),
 		ctx:                 ctx,
 		targetAddress:       host.IpAddress(),
 		targetName:          host.Name(),
@@ -58,7 +61,7 @@ func (mt *Task) Run() {
 		run = mt.waitForTick(ticker)
 	}
 
-	fmt.Printf("monitoring task [%s]: Terminated\n", mt.targetName)
+	mt.log.Debug("terminated")
 }
 
 func (mt *Task) randomDelay(maxDelay int64) bool {
@@ -74,12 +77,12 @@ func (mt *Task) randomDelay(maxDelay int64) bool {
 	// For test
 	//delay := 1 + rand.Int64N(2)
 
-	fmt.Printf("monitoring task [%s]: Initially pausing for %d seconds\n", mt.targetName, delay)
+	mt.log.Debug("initially pausing", "seconds", delay)
 	return mt.wait(time.Duration(delay) * time.Second)
 }
 
 func (mt *Task) scan() {
-	fmt.Printf("monitoring task [%s]: Scanning\n", mt.targetName)
+	mt.log.Debug("scanning")
 
 	scanStartTime := time.Now()
 
@@ -128,12 +131,11 @@ func (mt *Task) proberProbe(prober config.Prober, data *common.HostData) {
 }
 
 func (mt *Task) pingProbe(data *common.HostData) {
-	fmt.Printf("monitoring task [%s]: Pinging with %d packets %d second timeout\n",
-		mt.targetName, mt.host.PingCount(), mt.host.PingTimeoutSeconds())
+	mt.log.Debug("pinging", "packets", mt.host.PingCount(), "timeoutSeconds", mt.host.PingTimeoutSeconds())
 	pinger, cancelFn, err := mt.createPinger(mt.targetAddress)
 
 	if err != nil {
-		fmt.Printf("monitoring task [%s]: Failed to create pinger: %s\n", mt.targetName, err)
+		mt.log.Error("failed to create pinger", "error", err)
 		data.PingStatus = fmt.Sprintf("Unable to ping: %s", err)
 		return
 	}
@@ -142,7 +144,7 @@ func (mt *Task) pingProbe(data *common.HostData) {
 	err = pinger.Run()
 
 	if err != nil {
-		fmt.Printf("monitoring task [%s]: Failed to ping: %s\n", mt.targetName, err)
+		mt.log.Warn("failed to ping", "error", err)
 		data.PingStatus = fmt.Sprintf("Unable to ping: %s", err)
 		return
 	}
@@ -198,7 +200,7 @@ func (mt *Task) createPinger(targetAddress string) (*probing.Pinger, context.Can
 }
 
 func (mt *Task) snmpScan(data *common.HostData) {
-	fmt.Printf("monitoring task [%s]: Retrieving snmp data\n", mt.targetName)
+	mt.log.Debug("retrieving snmp data")
 	target := &gosnmp.GoSNMP{
 		Context:            mt.ctx,
 		Target:             mt.targetAddress,
@@ -214,14 +216,14 @@ func (mt *Task) snmpScan(data *common.HostData) {
 	scanStartTime := time.Now()
 
 	if err := target.Connect(); err != nil {
-		fmt.Printf("monitoring task [%s]: Unable to connect: %v\n", mt.targetName, err)
+		mt.log.Warn("unable to connect", "error", err)
 		data.SnmpStatus = fmt.Sprintf("Unable to connect: %v", err)
 		return
 	}
 
 	defer func() {
 		if err := target.Close(); err != nil {
-			fmt.Printf("monitoring task [%s]: Error closing connection: %v\n", mt.targetName, err)
+			mt.log.Error("error closing connection", "error", err)
 		}
 	}()
 
@@ -239,7 +241,7 @@ func (mt *Task) snmpScan(data *common.HostData) {
 		}
 	}
 
-	fmt.Printf("monitoring task [%s]: snmp walk completed in %v\n", mt.targetName, time.Since(scanStartTime))
+	mt.log.Debug("snmp walk completed", "took", time.Since(scanStartTime))
 
 	if uptimeSuccess || ifTableSuccess {
 		data.SnmpStatus = "OK"
@@ -256,7 +258,7 @@ func (mt *Task) getUptime(target *gosnmp.GoSNMP, data *common.HostData) bool {
 	result, err := target.Get(oids[:])
 
 	if err != nil {
-		fmt.Printf("monitoring task [%s]: Error retrieving values: %v\n", mt.targetName, err)
+		mt.log.Warn("error retrieving values", "error", err)
 		return false
 	}
 
@@ -469,7 +471,7 @@ func (mt *Task) getIfTable(target *gosnmp.GoSNMP, data *common.HostData, previou
 			return dataUnitCount > 0
 		}
 
-		fmt.Printf("monitoring task [%s]: Error retrieving ifTable via BulkWalk: %v\n", mt.targetName, err)
+		mt.log.Warn("error retrieving ifTable via BulkWalk", "error", err)
 		mt.useBulkWalk = false
 	}
 
@@ -479,7 +481,7 @@ func (mt *Task) getIfTable(target *gosnmp.GoSNMP, data *common.HostData, previou
 	walkStartTime := time.Time{}
 
 	if triedBulkWalk {
-		fmt.Printf("monitoring task [%s]: Retrieving ifTable via Walk\n", mt.targetName)
+		mt.log.Debug("retrieving ifTable via Walk")
 		walkStartTime = time.Now()
 	}
 
@@ -487,10 +489,10 @@ func (mt *Task) getIfTable(target *gosnmp.GoSNMP, data *common.HostData, previou
 
 	if err == nil {
 		if triedBulkWalk {
-			fmt.Printf("monitoring task [%s]: Successfully retrieved ifTable via Walk in %v\n", mt.targetName, time.Since(walkStartTime))
+			mt.log.Debug("retrieved ifTable via Walk", "took", time.Since(walkStartTime))
 		}
 	} else {
-		fmt.Printf("monitoring task [%s]: Error retrieving ifTable via Walk: %v\n", mt.targetName, err)
+		mt.log.Warn("error retrieving ifTable via Walk", "error", err)
 		return false
 	}
 
@@ -513,7 +515,7 @@ func (mt *Task) getIfXTable(target *gosnmp.GoSNMP, data *common.HostData) bool {
 	}
 
 	if err != nil {
-		fmt.Printf("monitoring task [%s]: Error retrieving ifXTable: %v\n", mt.targetName, err)
+		mt.log.Warn("error retrieving ifXTable", "error", err)
 		return false
 	}
 
@@ -536,7 +538,7 @@ func (mt *Task) getIpAddressTable(target *gosnmp.GoSNMP, data *common.HostData) 
 	}
 
 	if err != nil {
-		fmt.Printf("monitoring task [%s]: Error retrieving ipAddressTable: %v\n", mt.targetName, err)
+		mt.log.Warn("error retrieving ipAddressTable", "error", err)
 		return false
 	}
 
@@ -553,12 +555,10 @@ func (mt *Task) getIpAddressTable(target *gosnmp.GoSNMP, data *common.HostData) 
 						append(data.IfDataList[ipMapEntry.IfIndex-1].IpAddresses, *ipMapEntry)
 				}
 			} else {
-				fmt.Printf("monitoring task [%s]: invalid ipAddressTable entry %s: %v\n",
-					mt.targetName, key, err)
+				mt.log.Warn("invalid ipAddressTable entry", "key", key, "error", err)
 			}
 		} else {
-			fmt.Printf("monitoring task [%s]: ipMapEntry.IfIndex (%d) is out of range (%d)\n",
-				mt.targetName, ipMapEntry.IfIndex, len(data.IfDataList))
+			mt.log.Warn("ipMapEntry.IfIndex is out of range", "ifIndex", ipMapEntry.IfIndex, "interfaces", len(data.IfDataList))
 		}
 	}
 
@@ -631,7 +631,7 @@ func (mt *Task) getIpAddrTable(target *gosnmp.GoSNMP, data *common.HostData) boo
 	}
 
 	if err != nil {
-		fmt.Printf("monitoring task [%s]: Error retrieving ipAddrTable: %v\n", mt.targetName, err)
+		mt.log.Warn("error retrieving ipAddrTable", "error", err)
 		return false
 	}
 
@@ -641,8 +641,7 @@ func (mt *Task) getIpAddrTable(target *gosnmp.GoSNMP, data *common.HostData) boo
 			data.IfDataList[ipMapEntry.IfIndex-1].IpAddresses =
 				append(data.IfDataList[ipMapEntry.IfIndex-1].IpAddresses, *ipMapEntry)
 		} else {
-			fmt.Printf("monitoring task [%s]: ipMapEntry.IfIndex (%d) is out of range (%d)\n",
-				mt.targetName, ipMapEntry.IfIndex, len(data.IfDataList))
+			mt.log.Warn("ipMapEntry.IfIndex is out of range", "ifIndex", ipMapEntry.IfIndex, "interfaces", len(data.IfDataList))
 		}
 	}
 
@@ -775,9 +774,8 @@ func (mt *Task) processIfTableDetail(
 				offset := index - 1
 
 				if offset >= interfaceCount {
-					fmt.Printf(
-						"monitoring task [%s]: Interface index %d (array offset %d) in %s on oid %s is out of range (0-%d)\n",
-						mt.targetName, index, offset, tableName, oid, interfaceCount-1)
+					mt.log.Warn("interface index is out of range",
+						"index", index, "offset", offset, "table", tableName, "oid", oid, "max", interfaceCount-1)
 					continue
 				}
 				switch spec.valueType {
@@ -834,7 +832,7 @@ func (mt *Task) parseIfIndex(oidPrefix string, oid string) (int32, bool) {
 	index, err := strconv.ParseInt(oid[len(oidPrefix):], 10, 32)
 
 	if err != nil {
-		fmt.Printf("monitoring task [%s]: Unable to parse interface index from \"%s\"\n", mt.targetName, oid)
+		mt.log.Warn("unable to parse interface index", "oid", oid)
 		return -1, false
 	}
 
@@ -844,7 +842,7 @@ func parseStringValue(dataUnit gosnmp.SnmpPDU) (string, bool) {
 	value, ok := dataUnit.Value.(string)
 
 	if !ok {
-		fmt.Printf("Unable to cast %T value to string for oid \"%s\"\n", dataUnit.Value, dataUnit.Name)
+		valueLog.Warn("unable to cast value to string", "type", fmt.Sprintf("%T", dataUnit.Value), "oid", dataUnit.Name)
 		return "", false
 	}
 
@@ -855,7 +853,7 @@ func parseStringBytesValue(dataUnit gosnmp.SnmpPDU) (string, bool) {
 	value, ok := dataUnit.Value.([]byte)
 
 	if !ok {
-		fmt.Printf("Unable to cast %T value to []byte for oid \"%s\"\n", dataUnit.Value, dataUnit.Name)
+		valueLog.Warn("unable to cast value to []byte", "type", fmt.Sprintf("%T", dataUnit.Value), "oid", dataUnit.Name)
 		return "", false
 	}
 
@@ -866,7 +864,7 @@ func parsePhysicalAddressValue(dataUnit gosnmp.SnmpPDU) (string, bool) {
 	value, ok := dataUnit.Value.([]byte)
 
 	if !ok {
-		fmt.Printf("Unable to cast %T value to []byte for oid \"%s\"\n", dataUnit.Value, dataUnit.Name)
+		valueLog.Warn("unable to cast value to []byte", "type", fmt.Sprintf("%T", dataUnit.Value), "oid", dataUnit.Name)
 		return "", false
 	}
 
@@ -877,8 +875,7 @@ func parseInt32Value(dataUnit gosnmp.SnmpPDU) (int32, bool) {
 	value, ok := dataUnit.Value.(int)
 
 	if !ok {
-		fmt.Printf("Unable to cast %T value \"%v\" to int for oid \"%s\"\n",
-			dataUnit.Value, dataUnit.Value, dataUnit.Name)
+		valueLog.Warn("unable to cast value to int", "type", fmt.Sprintf("%T", dataUnit.Value), "value", dataUnit.Value, "oid", dataUnit.Name)
 		return 0, false
 	}
 
@@ -889,7 +886,7 @@ func parseUint32Value(dataUnit gosnmp.SnmpPDU) (uint32, bool) {
 	value, ok := dataUnit.Value.(uint)
 
 	if !ok {
-		fmt.Printf("Unable to cast %T value to uint for oid \"%s\"\n", dataUnit.Value, dataUnit.Name)
+		valueLog.Warn("unable to cast value to uint", "type", fmt.Sprintf("%T", dataUnit.Value), "oid", dataUnit.Name)
 		return 0, false
 	}
 
@@ -900,7 +897,7 @@ func parseUint64Value(dataUnit gosnmp.SnmpPDU) (uint64, bool) {
 	value, ok := dataUnit.Value.(uint64)
 
 	if !ok {
-		fmt.Printf("Unable to cast %T value to uint64 for oid \"%s\"\n", dataUnit.Value, dataUnit.Name)
+		valueLog.Warn("unable to cast value to uint64", "type", fmt.Sprintf("%T", dataUnit.Value), "oid", dataUnit.Name)
 		return 0, false
 	}
 
@@ -911,7 +908,7 @@ func parseTimeTicksValue(dataUnit gosnmp.SnmpPDU) (uint32, bool) {
 	value, ok := dataUnit.Value.(uint32)
 
 	if !ok {
-		fmt.Printf("Unable to cast %T value to uint32 for oid \"%s\"\n", dataUnit.Value, dataUnit.Name)
+		valueLog.Warn("unable to cast value to uint32", "type", fmt.Sprintf("%T", dataUnit.Value), "oid", dataUnit.Name)
 		return 0, false
 	}
 
@@ -920,16 +917,15 @@ func parseTimeTicksValue(dataUnit gosnmp.SnmpPDU) (uint32, bool) {
 }
 
 func printSNMPData(dataUnit gosnmp.SnmpPDU) {
-	fmt.Printf("oid: %s ", dataUnit.Name)
 	switch dataUnit.Type {
 	case gosnmp.OctetString:
 		bytes := dataUnit.Value.([]byte)
-		fmt.Printf("string: %s\n", string(bytes))
+		valueLog.Debug("unhandled oid", "oid", dataUnit.Name, "string", string(bytes))
 	default:
 		// ... or often you're just interested in numeric values.
 		// ToBigInt() will return the Value as a BigInt, for plugging
 		// into your calculations.
-		fmt.Printf("number: %d\n", gosnmp.ToBigInt(dataUnit.Value))
+		valueLog.Debug("unhandled oid", "oid", dataUnit.Name, "number", gosnmp.ToBigInt(dataUnit.Value))
 	}
 }
 
@@ -957,4 +953,13 @@ func (mt *Task) waitForTick(ticker *time.Ticker) bool {
 			return true
 		}
 	}
+}
+
+// valueLog is the logger of the functions that read values out of SNMP responses, which belong to no task. It is set once, by
+// SetValueLogger, before any task runs.
+var valueLog = slog.New(slog.DiscardHandler)
+
+// SetValueLogger sets the logger of the functions that read values out of SNMP responses.
+func SetValueLogger(log *slog.Logger) {
+	valueLog = log
 }

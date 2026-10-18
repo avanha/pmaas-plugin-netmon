@@ -2,6 +2,7 @@ package host
 
 import (
 	"fmt"
+	"log/slog"
 	"sync/atomic"
 
 	"github.com/avanha/pmaas-plugin-netmon/entities"
@@ -10,15 +11,17 @@ import (
 )
 
 type stub struct {
+	log                    *slog.Logger
 	id                     string
 	closeFn                func() error
 	entityWrapperReference atomic.Pointer[common.ThreadSafeEntityWrapper[entities.Host]]
 }
 
-func newHostStub(id string,
+func newHostStub(log *slog.Logger, id string,
 	entityWrapper *common.ThreadSafeEntityWrapper[entities.Host]) *stub {
 	instance := &stub{
-		id: id,
+		log: log,
+		id:  id,
 	}
 	instance.entityWrapperReference.Store(entityWrapper)
 	instance.closeFn = func() error {
@@ -43,7 +46,7 @@ func (s *stub) close() {
 	err := closeFn()
 
 	if err != nil {
-		fmt.Printf("Failed to close host stub %s: %v", s.id, err)
+		s.log.Error("failed to close host stub", "id", s.id, "error", err)
 	}
 }
 

@@ -2,6 +2,7 @@ package netinterface
 
 import (
 	"fmt"
+	"log/slog"
 	"sync/atomic"
 
 	"github.com/avanha/pmaas-plugin-netmon/entities"
@@ -10,16 +11,19 @@ import (
 )
 
 type stub struct {
+	log                    *slog.Logger
 	id                     string
 	closeFn                func() error
 	entityWrapperReference atomic.Pointer[common.ThreadSafeEntityWrapper[entities.NetworkInterface]]
 }
 
 func newNetInterfaceStub(
+	log *slog.Logger,
 	id string,
 	entityWrapper *common.ThreadSafeEntityWrapper[entities.NetworkInterface]) *stub {
 	instance := &stub{
-		id: id,
+		log: log,
+		id:  id,
 	}
 
 	instance.entityWrapperReference.Store(entityWrapper)
@@ -46,7 +50,7 @@ func (s *stub) close() {
 	err := closeFn()
 
 	if err != nil {
-		fmt.Printf("Failed to close netinterface stub %s: %v", s.id, err)
+		s.log.Error("failed to close netinterface stub", "id", s.id, "error", err)
 	}
 }
 
