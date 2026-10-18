@@ -277,7 +277,8 @@ func (h *Handler) handleHttpListRequest(writer http.ResponseWriter, request *htt
 		writer,
 		request,
 		spi.RenderListOptions{
-			Title: "netmon",
+			Title:   "netmon",
+			Masonry: true,
 			//Header: &result.Status,
 		},
 		entityPointers)
